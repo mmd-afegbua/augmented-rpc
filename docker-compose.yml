@@ -63,7 +63,7 @@ services:
       - CLICKHOUSE_DATABASE=rpc_cache
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=
-      - RPC_URL=${RPC_URL:-https://base-mainnet.rpc.x.superfluid.dev}
+      - RPC_URL=${RPC_URL:-https://mainnet.base.org}
     depends_on:
       redis:
         condition: service_healthy

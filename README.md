@@ -69,15 +69,15 @@ npm install
 
 **Option A: Single RPC (Simple)**
 ```bash
-RPC_URL=https://base-mainnet.rpc.x.superfluid.dev npm run start
+RPC_URL=https://mainnet.base.org npm run start
 ```
 
 **Option B: Multi-Network (Recommended)**
 Create `rpc.networks.json`:
 ```json
 {
-  "base-mainnet": "https://base-mainnet.rpc.x.superfluid.dev",
-  "polygon-mainnet": "https://polygon-mainnet.rpc.x.superfluid.dev",
+  "base-mainnet": "https://mainnet.base.org",
+  "polygon-mainnet": "https://polygon-rpc.com",
   "ethereum-mainnet": "https://mainnet.infura.io/v3/YOUR_KEY"
 }
 ```

@@ -26,17 +26,17 @@ server:
 # RPC Configuration
 rpc:
   # Single RPC URL (for simple setups)
-  url: "https://base-mainnet.rpc.x.superfluid.dev"
+  url: "https://mainnet.base.org"
   
   # Multi-network configuration (for advanced setups)
   networks:
     base-mainnet:
-      url: "https://base-mainnet.rpc.x.superfluid.dev"
+      url: "https://mainnet.base.org"
       timeout: 30000
       retries: 3
       retry_delay: 1000
     polygon-mainnet:
-      url: "https://polygon-mainnet.rpc.x.superfluid.dev"
+      url: "https://polygon-rpc.com"
       timeout: 30000
       retries: 3
       retry_delay: 1000
