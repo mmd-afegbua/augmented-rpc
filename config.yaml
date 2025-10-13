@@ -1,0 +1,247 @@
+# Augmented RPC Proxy Configuration
+# This file contains all configuration options for the RPC proxy
+
+# Application Settings
+app:
+  name: "Augmented RPC Proxy"
+  version: "1.0.0"
+  port: 3000
+  host: "0.0.0.0"
+  environment: "production"
+  log_level: "info"
+
+# Server Configuration
+server:
+  timeout: 30000
+  keep_alive: true
+  compression: true
+  cors:
+    enabled: true
+    origin: "*"
+    credentials: false
+  helmet:
+    enabled: true
+    content_security_policy: false
+
+# RPC Configuration
+rpc:
+  # Single RPC URL (for simple setups)
+  url: "https://base-mainnet.rpc.x.superfluid.dev"
+  
+  # Multi-network configuration (for advanced setups)
+  networks:
+    base-mainnet:
+      url: "https://base-mainnet.rpc.x.superfluid.dev"
+      timeout: 30000
+      retries: 3
+      retry_delay: 1000
+    polygon-mainnet:
+      url: "https://polygon-mainnet.rpc.x.superfluid.dev"
+      timeout: 30000
+      retries: 3
+      retry_delay: 1000
+    ethereum-mainnet:
+      url: "https://mainnet.infura.io/v3/YOUR_KEY"
+      timeout: 30000
+      retries: 3
+      retry_delay: 1000
+  
+  # Global RPC settings
+  timeout: 30000
+  retries: 3
+  retry_delay: 1000
+  batch_concurrency_limit: 10
+  batch_timeout: 5000
+
+# Cache Configuration
+cache:
+  type: "hybrid"  # Options: "memory", "database", "hybrid", "redis", "clickhouse"
+  
+  # Cache TTL settings (in seconds)
+  ttl:
+    default: 3600
+    immutable: 0  # Never expires
+    block_data: 300
+    log_data: 3600
+    call_data: 0  # Never expires
+    receipt_data: 0  # Never expires
+  
+  # Cache size limits
+  max_size: 1000000
+  max_memory_usage: "2gb"
+  
+  # Compression settings
+  compression:
+    enabled: true
+    threshold: 1024
+    min_ratio: 0.2
+  
+  # Database cache settings
+  database:
+    type: "sqlite"  # Options: "sqlite", "postgresql", "clickhouse"
+    path: "./cache.sqlite"
+    connection_string: ""
+    max_connections: 10
+  
+  # Redis cache settings
+  redis:
+    url: "redis://localhost:6379"
+    max_memory: "2gb"
+    max_memory_policy: "allkeys-lru"
+    timeout: 5000
+    retries: 3
+  
+  # ClickHouse cache settings
+  clickhouse:
+    url: "http://localhost:8123"
+    database: "rpc_cache"
+    user: "default"
+    password: ""
+    timeout: 5000
+    max_connections: 10
+
+# Performance Optimizations
+performance:
+  # Connection pooling
+  connection_pool:
+    enabled: true
+    size: 50
+    timeout: 30000
+    keepalive: true
+  
+  # Circuit breaker
+  circuit_breaker:
+    enabled: true
+    threshold: 5
+    timeout: 60000
+    reset_timeout: 30000
+  
+  # Request queuing
+  request_queue:
+    enabled: true
+    size: 1000
+    concurrency: 10
+    timeout: 30000
+  
+  # Cache warming
+  cache_warming:
+    enabled: true
+    interval: 300000  # 5 minutes
+    batch_size: 100
+  
+  # Subgraph optimizations
+  subgraph:
+    enabled: true
+    prefetch:
+      enabled: true
+      interval: 60000  # 1 minute
+      batch_size: 50
+    block_range_optimization: true
+    stream_processing: true
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  port: 3000
+  path: "/metrics"
+  
+  # Prometheus settings
+  prometheus:
+    enabled: true
+    collect_default_metrics: true
+    timeout: 5000
+  
+  # Custom metrics
+  custom_metrics:
+    response_time: true
+    cache_hit_rate: true
+    error_rate: true
+    throughput: true
+    compression_ratio: true
+
+# Logging Configuration
+logging:
+  level: "info"  # Options: "error", "warn", "info", "debug"
+  format: "json"  # Options: "json", "simple", "combined"
+  file:
+    enabled: false
+    path: "./logs/rpc-proxy.log"
+    max_size: "10mb"
+    max_files: 5
+  console:
+    enabled: true
+    colorize: true
+
+# Health Check Configuration
+health:
+  enabled: true
+  path: "/health"
+  interval: 30000
+  timeout: 5000
+  
+  # Health check endpoints
+  checks:
+    rpc: true
+    cache: true
+    database: true
+    redis: true
+    clickhouse: true
+
+# Security Configuration
+security:
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    window_ms: 60000  # 1 minute
+    max_requests: 1000
+  
+  # Request validation
+  validation:
+    enabled: true
+    max_request_size: "10mb"
+    max_batch_size: 100
+  
+  # IP whitelist (optional)
+  ip_whitelist:
+    enabled: false
+    ips: []
+  
+  # Authentication (optional)
+  auth:
+    enabled: false
+    type: "bearer"  # Options: "bearer", "basic", "api_key"
+    token: ""
+
+# Monitoring and Alerting
+monitoring:
+  # Health monitoring
+  health_monitoring:
+    enabled: true
+    interval: 30000
+    timeout: 5000
+  
+  # Performance monitoring
+  performance_monitoring:
+    enabled: true
+    interval: 60000
+    metrics:
+      - "response_time"
+      - "cache_hit_rate"
+      - "error_rate"
+      - "throughput"
+  
+  # Alerting (optional)
+  alerting:
+    enabled: false
+    webhook_url: ""
+    thresholds:
+      error_rate: 0.05  # 5%
+      response_time: 5000  # 5 seconds
+      cache_hit_rate: 0.8  # 80%
+
+# Development Settings
+development:
+  hot_reload: false
+  debug: false
+  verbose_logging: false
+  mock_rpc: false

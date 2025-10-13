@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Memory settings optimized for caching -->
+    <max_memory_usage>8000000000</max_memory_usage> <!-- 8GB -->
+    <max_bytes_before_external_group_by>2000000000</max_bytes_before_external_group_by>
+    <max_bytes_before_external_sort>2000000000</max_bytes_before_external_sort>
+    <max_memory_usage_for_user>4000000000</max_memory_usage_for_user> <!-- 4GB per user -->
+    
+    <!-- Compression settings for large JSON data -->
+    <compression>
+        <case>
+            <min_part_size>10000000000</min_part_size> <!-- 10GB -->
+            <min_part_size_ratio>0.01</min_part_size_ratio>
+            <method>lz4</method>
+        </case>
+        <case>
+            <min_part_size>1000000000</min_part_size> <!-- 1GB -->
+            <min_part_size_ratio>0.1</min_part_size_ratio>
+            <method>zstd</method>
+        </case>
+    </compression>
+    
+    <!-- Network settings -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <interserver_http_port>9009</interserver_http_port>
+    
+    <!-- Performance settings -->
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_server_memory_usage>16000000000</max_server_memory_usage> <!-- 16GB -->
+    <max_thread_pool_size>10000</max_thread_pool_size>
+    
+    <!-- Required paths -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+    
+    <!-- Storage configuration -->
+    <storage_configuration>
+        <disks>
+            <default>
+                <path>/var/lib/clickhouse/</path>
+            </default>
+        </disks>
+        <policies>
+            <default>
+                <volumes>
+                    <default>
+                        <disk>default</disk>
+                    </default>
+                </volumes>
+            </default>
+        </policies>
+    </storage_configuration>
+    
+    <!-- Logging -->
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+    
+    <!-- Query log for monitoring -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+    
+    <!-- Part log for monitoring -->
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+    
+    <!-- User directories -->
+    <user_directories>
+        <users_xml>
+            <path>/etc/clickhouse-server/users.xml</path>
+        </users_xml>
+    </user_directories>
+</clickhouse>

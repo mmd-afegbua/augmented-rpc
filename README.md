@@ -4,12 +4,68 @@ A high-performance, production-ready JSON-RPC proxy optimized for **subgraph syn
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Option 1: Docker Compose (Recommended)
+
+**1. Clone and Setup**
+```bash
+git clone <your-repo>
+cd augmented-rpc
+```
+
+**2. Configure Environment**
+
+**Option A: YAML Configuration (Recommended)**
+```bash
+# Edit the YAML configuration file
+nano config.yaml
+
+# Or create a custom config
+cp config.yaml config.custom.yaml
+nano config.custom.yaml
+```
+
+**Option B: Environment Variables**
+```bash
+# Copy Docker environment template
+cp env.docker .env
+
+# Edit .env with your RPC URLs
+nano .env
+```
+
+**3. Start Everything**
+```bash
+# Start all services (RPC proxy + ClickHouse + Redis)
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f rpc-proxy
+```
+
+**4. Test Your Setup**
+```bash
+# Test basic functionality
+curl -X POST http://localhost:3000/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}'
+
+# Test multi-network (if configured)
+curl -X POST http://localhost:3000/base-mainnet \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}'
+```
+
+### Option 2: Local Development
+
+**1. Install Dependencies**
 ```bash
 npm install
 ```
 
-### 2. Configure Your RPC URLs
+**2. Configure Your RPC URLs**
 
 **Option A: Single RPC (Simple)**
 ```bash
@@ -31,7 +87,7 @@ Then start:
 npm run start
 ```
 
-### 3. Test Your Setup
+**3. Test Your Setup**
 ```bash
 # Test basic functionality
 curl -X POST http://localhost:3000/ \
@@ -44,7 +100,164 @@ curl -X POST http://localhost:3000/base-mainnet \
   -d '{"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1}'
 ```
 
-## 🎯 Perfect for Subgraph Syncing
+## 🐳 Docker Compose Services
+
+The Docker Compose setup includes:
+
+- **rpc-proxy**: The main Augmented RPC Proxy application
+- **clickhouse**: ClickHouse database for persistent caching (handles 800GB+ data)
+- **redis**: Redis for hot caching (recent data, sub-millisecond access)
+
+### Service Ports
+- **RPC Proxy**: `http://localhost:3000`
+- **ClickHouse HTTP**: `http://localhost:8123`
+- **ClickHouse Native**: `localhost:9000`
+- **Redis**: `localhost:6379`
+
+### Docker Commands
+```bash
+# Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose down
+
+# View logs
+docker-compose logs -f rpc-proxy
+docker-compose logs -f clickhouse
+docker-compose logs -f redis
+
+# Restart a service
+docker-compose restart rpc-proxy
+
+# Scale services (if needed)
+docker-compose up -d --scale rpc-proxy=3
+
+# Clean up volumes (removes all cached data)
+docker-compose down -v
+```
+
+### Configuration Options
+
+**YAML Configuration (Recommended)**
+The `config.yaml` file provides a comprehensive template with all configuration options:
+
+```bash
+# Edit the configuration directly
+nano config.yaml
+
+# Or create a custom config
+cp config.yaml config.custom.yaml
+nano config.custom.yaml
+```
+
+Key sections in the YAML config:
+- **app**: Basic application settings (port, environment, logging)
+- **rpc**: RPC endpoints and network configuration
+- **cache**: Cache strategy and TTL settings
+- **performance**: Connection pooling, circuit breaker, request queuing
+- **metrics**: Prometheus metrics configuration
+- **security**: Rate limiting and authentication
+- **monitoring**: Health checks and alerting
+
+**Environment Variables (Alternative)**
+Copy `env.docker` to `.env` and customize:
+```bash
+cp env.docker .env
+nano .env
+```
+
+Key settings:
+- `CONFIG_FILE`: Path to YAML config file
+- `RPC_URL`: Your upstream RPC endpoint
+- `REDIS_URL`: Redis connection (default: `redis://redis:6379`)
+- `CLICKHOUSE_URL`: ClickHouse connection (default: `http://clickhouse:8123`)
+- `CACHE_TYPE`: Set to `hybrid` for Redis + ClickHouse
+
+**Configuration Priority:**
+1. Environment variables (highest priority)
+2. YAML configuration file
+3. Default values (lowest priority)
+
+## 🚀 GitHub Actions CI/CD
+
+This repository includes comprehensive GitHub Actions workflows for automated building, testing, and deployment:
+
+### **Workflows Overview**
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **Docker Build** | Push to `main`, tags, PRs to `main` | Build and push Docker images to GitHub Container Registry |
+| **Development Build** | PRs to `main` | Quick build and test for development |
+| **Test Suite** | Push to `main`, PRs to `main` | Comprehensive testing with Redis and ClickHouse |
+
+### **Docker Images**
+
+Images are automatically built and pushed to GitHub Container Registry:
+
+```bash
+# Pull latest image
+docker pull ghcr.io/your-username/augmented-rpc:latest
+
+# Run with Docker Compose
+docker-compose up -d
+
+# Run standalone
+docker run -p 3000:3000 ghcr.io/your-username/augmented-rpc:latest
+```
+
+### **Image Tags**
+
+- `latest` - Latest from main branch
+- `develop` - Latest from develop branch  
+- `v1.0.0` - Semantic version tags
+- `main-abc1234` - Commit SHA tags
+- `pr-123` - Pull request tags
+
+### **Security Features**
+
+- **Multi-platform builds**: linux/amd64, linux/arm64
+- **Vulnerability scanning**: Trivy security scanner
+- **Artifact attestation**: Build provenance verification
+- **Automated releases**: Tagged releases with release notes
+
+### **Local Development**
+
+```bash
+# Test locally before pushing
+docker-compose up -d
+./test-augmented-rpc.sh
+
+# Build local image
+docker build -t augmented-rpc:local .
+```
+
+### **GitHub Actions Usage**
+
+**For Development:**
+```bash
+# Create feature branch
+git checkout -b feature/new-feature
+git push origin feature/new-feature
+
+# Create pull request to main
+# Triggers: Development build + Test suite
+```
+
+**For Production:**
+```bash
+# Push to main branch
+git push origin main
+# Triggers: Full build + Test suite + Security scan
+
+# Create release
+git tag v1.0.0
+git push origin v1.0.0
+# Triggers: Release creation with Docker image
+```
+
+**Pull Requests:**
+- **PR to main**: Development build + test suite + security scan
 
 This proxy is specifically optimized for subgraph workloads:
 
