@@ -86,6 +86,23 @@ export class RPCProxy {
 
 		this.httpClient = new HTTPClient(this.config, this.logger, this.connectionPool);
 
+		// Load network map from YAML config first
+		if (this.config.rpc.networks && Object.keys(this.config.rpc.networks).length > 0) {
+			// Populate from YAML config
+			for (const [networkKey, networkConfig] of Object.entries(this.config.rpc.networks)) {
+				if (typeof networkConfig === 'object' && networkConfig !== null && 'url' in networkConfig) {
+					this.networkMap[networkKey] = networkConfig.url;
+					// Initialize circuit breaker for each network
+					this.circuitBreakers.set(networkKey, new CircuitBreaker({
+						failureThreshold: 5,
+						recoveryTimeout: 60000, // 1 minute
+						monitoringPeriod: 300000 // 5 minutes
+					}, this.logger));
+				}
+			}
+			this.logger.info('Loaded RPC networks from YAML config', { count: Object.keys(this.networkMap).length });
+		}
+
 		// Load network map
 		const mapPath = process.env.RPC_NETWORKS_FILE
 			? path.resolve(process.env.RPC_NETWORKS_FILE)

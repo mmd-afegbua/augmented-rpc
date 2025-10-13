@@ -34,8 +34,14 @@ nano .env
 ```
 
 **3. Start Everything**
+
+**Option A: Production (Pre-built Images)**
 ```bash
+# Create data directories (if they don't exist)
+mkdir -p data/clickhouse data/redis
+
 # Start all services (RPC proxy + ClickHouse + Redis)
+# Uses pre-built image: ghcr.io/mmd-afegbua/augmented-rpc:latest
 docker-compose up -d
 
 # Check status
@@ -43,6 +49,22 @@ docker-compose ps
 
 # View logs
 docker-compose logs -f rpc-proxy
+```
+
+**Option B: Development (Build from Source)**
+```bash
+# Create data directories (if they don't exist)
+mkdir -p data/clickhouse data/redis
+
+# Start all services with custom builds
+# Builds RPC proxy from source (ClickHouse uses same image)
+docker-compose -f docker-compose.dev.yml up -d
+
+# Check status
+docker-compose -f docker-compose.dev.yml ps
+
+# View logs
+docker-compose -f docker-compose.dev.yml logs -f rpc-proxy
 ```
 
 **4. Test Your Setup**
@@ -104,19 +126,18 @@ curl -X POST http://localhost:3000/base-mainnet \
 
 The Docker Compose setup includes:
 
-- **rpc-proxy**: The main Augmented RPC Proxy application
+- **rpc-proxy**: The main Augmented RPC Proxy application (uses pre-built image: `ghcr.io/mmd-afegbua/augmented-rpc:latest`)
 - **clickhouse**: ClickHouse database for persistent caching (handles 800GB+ data)
 - **redis**: Redis for hot caching (recent data, sub-millisecond access)
 
 ### Service Ports
 - **RPC Proxy**: `http://localhost:3000`
-- **ClickHouse HTTP**: `http://localhost:8123`
-- **ClickHouse Native**: `localhost:9000`
-- **Redis**: `localhost:6379`
+- **ClickHouse**: Internal only (accessible via `clickhouse:8123` from within network)
+- **Redis**: Internal only (accessible via `redis:6379` from within network)
 
 ### Docker Commands
 ```bash
-# Start all services
+# Start all services (pulls pre-built image)
 docker-compose up -d
 
 # Stop all services
@@ -127,6 +148,12 @@ docker-compose logs -f rpc-proxy
 docker-compose logs -f clickhouse
 docker-compose logs -f redis
 
+# Backup data (data is stored in ./data/ directory)
+tar -czf backup-$(date +%Y%m%d).tar.gz data/
+
+# Restore data
+tar -xzf backup-YYYYMMDD.tar.gz
+
 # Restart a service
 docker-compose restart rpc-proxy
 
@@ -136,6 +163,26 @@ docker-compose up -d --scale rpc-proxy=3
 # Clean up volumes (removes all cached data)
 docker-compose down -v
 ```
+
+### Data Persistence
+- **ClickHouse data**: Stored in `./data/clickhouse/`
+- **Redis data**: Stored in `./data/redis/`
+- **Configuration**: Stored in `./clickhouse-config/` and `./config.yaml`
+
+### Development vs Production
+
+**Production Setup** (`docker-compose.yml`)
+- Uses pre-built images from registries
+- Optimized for performance and stability
+- Faster startup times
+- Recommended for production deployments
+
+**Development Setup** (`docker-compose.dev.yml`)
+- Uses same ClickHouse image as production
+- Builds RPC proxy from local source code
+- Includes source code mounting for live development
+- Enables debugging and development logging
+- Slower initial build but better for development
 
 ### Configuration Options
 

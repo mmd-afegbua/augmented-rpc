@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for Augmented RPC Proxy with comprehensive test cases
-BASE_URL="http://localhost:3000"
+BASE_URL="http://sandbox.x.superfluid.dev:3000"
 
 echo "Testing Augmented RPC Proxy"
 echo "=========================="

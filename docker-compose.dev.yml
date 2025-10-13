@@ -1,9 +1,10 @@
 version: '3.8'
 
 services:
+  # ClickHouse (same as production)
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse-server
+    container_name: clickhouse-server-dev
     volumes:
       - ./data/clickhouse:/var/lib/clickhouse
       - ./clickhouse-config:/etc/clickhouse-server
@@ -22,7 +23,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: redis-server
+    container_name: redis-server-dev
     volumes:
       - ./data/redis:/data
     command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
@@ -33,18 +34,22 @@ services:
       timeout: 5s
       retries: 3
 
+  # RPC Proxy built from source for development
   rpc-proxy:
-    image: ghcr.io/mmd-afegbua/augmented-rpc:latest
-    container_name: augmented-rpc-proxy
+    build: .
+    container_name: augmented-rpc-proxy-dev
     ports:
       - "3000:3000"
     volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
       - ./config.yaml:/app/config.yaml
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - CONFIG_FILE=/app/config.yaml
       - PORT=3000
-      - LOG_LEVEL=info
+      - LOG_LEVEL=debug
       - CACHE_TYPE=hybrid
       - REDIS_URL=redis://redis:6379
       - CLICKHOUSE_URL=http://clickhouse:8123
@@ -64,4 +69,4 @@ services:
 
 networks:
   default:
-    name: augmented-rpc-network
+    name: augmented-rpc-network-dev

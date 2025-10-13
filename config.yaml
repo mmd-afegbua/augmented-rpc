@@ -30,8 +30,8 @@ rpc:
   
   # Multi-network configuration (for advanced setups)
   networks:
-    base-mainnet:
-      url: "https://mainnet.base.org"
+    scroll-sepolia:
+      url: "https://scroll-mainnet.g.alchemy.com/v2/"
       timeout: 30000
       retries: 3
       retry_delay: 1000
