@@ -18,6 +18,7 @@ import { CacheWarmer } from '@/utils/cache-warmer';
 import { SubgraphPrefetcher } from '@/utils/subgraph-prefetcher';
 import { AdvancedSubgraphCacheStrategy } from '@/utils/subgraph-cache-strategy';
 import { SubgraphMetrics } from '@/telemetry/subgraph-metrics';
+import { RequestRouter } from '@/utils/request-router';
 
 export class RPCProxy {
 	private readonly app = express();
@@ -41,6 +42,9 @@ export class RPCProxy {
 	private readonly subgraphPrefetcher: SubgraphPrefetcher;
 	private readonly subgraphCacheStrategy: AdvancedSubgraphCacheStrategy;
 	private readonly subgraphMetrics: SubgraphMetrics;
+	
+	// Request routing for primary/fallback upstreams
+	private readonly requestRouter?: RequestRouter;
 	
 	private stats: ProxyStats = {
 		httpRequestsProcessed: 0,
@@ -81,6 +85,17 @@ export class RPCProxy {
 		this.subgraphPrefetcher = new SubgraphPrefetcher(this.logger);
 		this.subgraphCacheStrategy = new AdvancedSubgraphCacheStrategy(this.logger);
 		this.subgraphMetrics = SubgraphMetrics.getInstance();
+
+		// Initialize request router with networks and optional global upstreams
+		this.requestRouter = new RequestRouter(
+			this.config.rpc.upstreams,
+			this.config.rpc.networks,
+			this.logger
+		);
+		this.logger.info('Request router initialized with network-specific fallbacks', {
+			networks: Object.keys(this.config.rpc.networks),
+			globalUpstreams: this.config.rpc.upstreams ? 'configured' : 'not configured'
+		});
 
 		this.httpClient = new HTTPClient(this.config, this.logger, this.connectionPool);
 
@@ -142,6 +157,27 @@ export class RPCProxy {
 
 	private getNetworkUrl(key: string): string | undefined {
 		return this.networkMap[key];
+	}
+
+	private getUpstreamUrl(networkKey?: string): string {
+		// If request router is available, use it to determine the best upstream
+		if (this.requestRouter) {
+			const routingDecision = this.requestRouter.routeRequest(networkKey);
+			// Record routing decision metric
+			this.metrics.recordRoutingDecision(
+				networkKey || 'default', 
+				'primary', 
+				routingDecision.reason
+			);
+			return routingDecision.upstream.url;
+		}
+
+		// Fallback to network-specific URL or default
+		if (networkKey) {
+			return this.networkMap[networkKey] || this.config.rpc.url;
+		}
+		
+		return this.config.rpc.url;
 	}
 
 	private generateInflightKey(keyPrefix: string, request: JSONRPCRequest): string {
@@ -256,7 +292,7 @@ export class RPCProxy {
 					res.status(HTTP_STATUS.NOT_FOUND).json({ error: `Unknown network '${network}'` });
 					return;
 				}
-				await this.handleRPCRequestWithTarget(req, res, network, targetUrl);
+				await this.handleRPCRequestWithTarget(req, res, network);
 			}
 		);
 
@@ -277,7 +313,7 @@ export class RPCProxy {
 					});
 					return;
 				}
-				this.handleRPCRequestWithTarget(req, res, 'default', defaultUrl);
+				this.handleRPCRequestWithTarget(req, res, 'default');
 			}
 		);
 
@@ -285,19 +321,20 @@ export class RPCProxy {
 		this.app.use(this.errorResponder);
 	}
 
-	private async handleRPCRequestWithTarget(req: Request, res: Response, networkKey?: string, targetUrl?: string): Promise<void> {
+	private async handleRPCRequestWithTarget(req: Request, res: Response, networkKey?: string): Promise<void> {
 		const body = req.body as JSONRPCRequest | JSONRPCRequest[];
 		const start = Date.now();
 
 		try {
 			if (Array.isArray(body)) {
 				// Process batch requests in parallel with concurrency limit
-				const responses = await this.processBatchRequests(req, body, start, networkKey, targetUrl);
+				const responses = await this.processBatchRequests(req, body, start, networkKey);
 				res.status(HTTP_STATUS.OK).json(responses);
 				return;
 			}
 
-			const response = await this.processSingleRequest(req, body, start, networkKey, targetUrl);
+			const upstreamUrl = this.getUpstreamUrl(networkKey);
+			const response = await this.processSingleRequest(req, body, start, networkKey, upstreamUrl);
 			res.status(HTTP_STATUS.OK).json(response);
 		} catch (err: any) {
 			const id = Array.isArray(body) ? null : (body as JSONRPCRequest).id ?? null;
@@ -318,8 +355,7 @@ export class RPCProxy {
 		req: Request, 
 		requests: JSONRPCRequest[], 
 		startTs: number, 
-		networkKey?: string, 
-		targetUrl?: string
+		networkKey?: string
 	): Promise<JSONRPCResponse[]> {
 		// Apply subgraph-specific optimizations
 		const optimizedRequests = this.subgraphCacheStrategy.optimizeForSubgraph(requests);
@@ -335,9 +371,10 @@ export class RPCProxy {
 		// Process requests in chunks to limit concurrency
 		for (let i = 0; i < optimizedRequests.length; i += concurrencyLimit) {
 			const chunk = optimizedRequests.slice(i, i + concurrencyLimit);
-			const chunkPromises = chunk.map(request => 
-				this.processSingleRequest(req, request, startTs, networkKey, targetUrl)
-			);
+			const chunkPromises = chunk.map(request => {
+				const upstreamUrl = this.getUpstreamUrl(networkKey);
+				return this.processSingleRequest(req, request, startTs, networkKey, upstreamUrl);
+			});
 			
 			const chunkResults = await Promise.allSettled(chunkPromises);
 			
@@ -377,6 +414,9 @@ export class RPCProxy {
 		const cacheKey = keyPrefix + this.cacheManager.getCacheKey(request);
 
 		const { isCacheable, maxAgeMs } = this.resolveCachePolicyForSubgraph(request);
+		
+		// Record network request metric
+		this.metrics.recordNetworkRequest(networkKey || 'default', request.method);
 		
 		// Optimize inflight key generation for common methods
 		const inflightKey = this.generateInflightKey(keyPrefix, request);
@@ -427,13 +467,91 @@ export class RPCProxy {
 				const circuitBreaker = networkKey ? this.circuitBreakers.get(networkKey) : undefined;
 				
 				const executeRequest = async (): Promise<JSONRPCResponse> => {
+					let upstreamResponse;
+					let finalTargetUrl = targetUrl;
+					let fallbackUsed = false;
 
-					// Get connection pool for this network
-					// const agent = this.connectionPool.getAgentForNetwork(queueKey);
-					
-					// Make upstream request with optimized connection
-					const upstreamResponse = await this.httpClient.makeRequest(request, undefined, undefined, targetUrl, networkKey);
+					try {
+						// Try primary upstream first
+						upstreamResponse = await this.httpClient.makeRequest(request, undefined, undefined, targetUrl, networkKey);
+						
+						// Check if we got a null result for historical data that might need archive node
+						if (this.requestRouter && !fallbackUsed && upstreamResponse && upstreamResponse.data && upstreamResponse.data.result === null) {
+							const shouldFallback = this.requestRouter.shouldFallbackToArchive(null, request, upstreamResponse.data);
+							
+							if (shouldFallback) {
+								const fallbackUpstream = this.requestRouter.getFallbackUpstream(networkKey);
+								finalTargetUrl = fallbackUpstream.url;
+								fallbackUsed = true;
+								
+								// Record fallback metric
+								this.metrics.recordFallbackRequest(
+									networkKey || 'default',
+									'fallback',
+									'null_result'
+								);
+								
+								// Record archive node request
+								this.metrics.recordArchiveNodeRequest(
+									networkKey || 'default',
+									request.method
+								);
+								
+								this.logger.warn('Primary upstream returned null result, trying fallback', {
+									requestId: (req as any).requestId,
+									method: request.method,
+									network: networkKey || 'default',
+									upstreamType: 'primary',
+									fallbackType: 'fallback'
+								});
+								
+								upstreamResponse = await this.httpClient.makeRequest(request, undefined, undefined, finalTargetUrl, networkKey);
+							}
+						}
+					} catch (error: any) {
+						// If primary fails and we have a request router, check if we should try fallback
+						if (this.requestRouter && !fallbackUsed) {
+							const shouldFallback = this.requestRouter.shouldFallbackToArchive(error, request);
+							
+							if (shouldFallback) {
+								const fallbackUpstream = this.requestRouter.getFallbackUpstream(networkKey);
+								finalTargetUrl = fallbackUpstream.url;
+								fallbackUsed = true;
+								
+								// Record fallback metric
+								this.metrics.recordFallbackRequest(
+									networkKey || 'default',
+									'fallback',
+									'error_response'
+								);
+								
+								// Record archive node request
+								this.metrics.recordArchiveNodeRequest(
+									networkKey || 'default',
+									request.method
+								);
+								
+								this.logger.warn('Primary upstream failed, trying fallback', {
+									requestId: (req as any).requestId,
+									method: request.method,
+									network: networkKey || 'default',
+									upstreamType: 'primary',
+									fallbackType: 'fallback',
+									error: error.message
+								});
+								
+								upstreamResponse = await this.httpClient.makeRequest(request, undefined, undefined, finalTargetUrl, networkKey);
+							} else {
+								// Error doesn't indicate archive node is needed, just fail
+								throw error;
+							}
+						} else {
+							throw error;
+						}
+					}
+
 					const duration = Date.now() - startTs;
+					
 					
 					// Record response size metrics
 					const responseSize = JSON.stringify(upstreamResponse.data).length;
@@ -445,6 +563,13 @@ export class RPCProxy {
 					this.metrics.cacheMissesTotal.labels(request.method).inc();
 					this.metrics.requestsTotal.labels(request.method, 'MISS', 'success').inc();
 					this.metrics.requestDurationMs.labels(request.method, 'MISS').observe(duration);
+					
+					// Record upstream response time
+					this.metrics.recordUpstreamResponseTime(
+						networkKey || 'default',
+						fallbackUsed ? 'fallback' : 'primary',
+						duration
+					);
 
 					this.logger.info('RPC forwarded to upstream', {
 						requestId: (req as any).requestId,
@@ -456,11 +581,34 @@ export class RPCProxy {
 						responseSize,
 						cacheable: isCacheable,
 						cacheStatus: 'MISS',
+						upstreamType: fallbackUsed ? 'fallback' : 'primary',
+						fallbackUsed
 					});
 
 					const rpcData = upstreamResponse.data as JSONRPCResponse;
-					if (isCacheable && rpcData && rpcData.result !== undefined) {
+					
+					// Enhanced cache validation - don't cache problematic responses
+					const shouldCache = isCacheable && rpcData && rpcData.result !== undefined && 
+						rpcData.result !== null && 
+						!this.isProblematicResponse(rpcData.result);
+					
+					if (shouldCache) {
 						await this.cacheManager.writeToCache(cacheKey, rpcData.result);
+					} else if (isCacheable && rpcData && rpcData.result !== undefined) {
+						// Record why we didn't cache this response
+						let reason = 'unknown';
+						if (rpcData.result === null) reason = 'null_result';
+						else if (this.isProblematicResponse(rpcData.result)) {
+							if (Array.isArray(rpcData.result) && rpcData.result.length === 0) reason = 'empty_array';
+							else if (typeof rpcData.result === 'object' && rpcData.result !== null && Object.keys(rpcData.result).length === 0) reason = 'empty_object';
+							else if (typeof rpcData.result === 'string' && rpcData.result.includes('error')) reason = 'error_string';
+						}
+						
+						this.metrics.recordCacheInvalidEntry(
+							networkKey || 'default',
+							request.method,
+							reason
+						);
 					}
 
 					return rpcData;
@@ -483,24 +631,54 @@ export class RPCProxy {
 		return wrapped;
 	}
 
+	private isProblematicResponse(result: any): boolean {
+		// Don't cache empty arrays (might indicate no data available)
+		if (Array.isArray(result) && result.length === 0) {
+			return true;
+		}
+		
+		// Don't cache empty objects (might indicate incomplete data)
+		if (typeof result === 'object' && result !== null && Object.keys(result).length === 0) {
+			return true;
+		}
+		
+		// Don't cache strings that look like errors
+		if (typeof result === 'string' && (
+			result.includes('error') || 
+			result.includes('not found') || 
+			result.includes('unavailable')
+		)) {
+			return true;
+		}
+		
+		return false;
+	}
+
+
 	private resolveCachePolicyForSubgraph(request: JSONRPCRequest): { isCacheable: boolean; maxAgeMs: number } {
 		if (CACHEABLE_METHODS.INFINITELY_CACHEABLE.includes(request.method as any)) {
 			return { isCacheable: true, maxAgeMs: Number.POSITIVE_INFINITY };
 		}
 		if (CACHEABLE_METHODS.TIME_CACHEABLE.includes(request.method as any)) {
-			return { isCacheable: true, maxAgeMs: this.config.cache.maxAge * 1000 };
-		}
-		if (request.method === 'eth_getLogs') {
-			return { isCacheable: true, maxAgeMs: this.config.cache.maxAge * 1000 };
-		}
-		if (request.method === 'eth_call') {
-			const params = Array.isArray(request.params) ? request.params : [];
-			const callObject = params.find((p) => typeof p === 'object' && p !== null) as Record<string, unknown> | undefined;
-			const hasBlockHash = !!callObject && Object.prototype.hasOwnProperty.call(callObject, 'blockHash');
-			const hasBlockNumber = !!params[1] && typeof params[1] === 'string' && params[1].startsWith('0x');
-			if (hasBlockHash || hasBlockNumber) {
-				return { isCacheable: true, maxAgeMs: Number.POSITIVE_INFINITY };
+			// Special handling for methods that can be either time-cached or infinitely cached
+			if (request.method === 'eth_call') {
+				const params = Array.isArray(request.params) ? request.params : [];
+				const callObject = params.find((p) => typeof p === 'object' && p !== null) as Record<string, unknown> | undefined;
+				const hasBlockHash = !!callObject && Object.prototype.hasOwnProperty.call(callObject, 'blockHash');
+				const hasBlockNumber = !!params[1] && typeof params[1] === 'string' && params[1].startsWith('0x');
+				if (hasBlockHash || hasBlockNumber) {
+					return { isCacheable: true, maxAgeMs: Number.POSITIVE_INFINITY };
+				}
 			}
+			if (request.method === 'eth_getBlockByNumber') {
+				const params = Array.isArray(request.params) ? request.params : [];
+				const blockParam = params[0];
+				// If it's a specific block number (not 'latest' or 'pending'), cache it infinitely
+				if (typeof blockParam === 'string' && blockParam.startsWith('0x') && blockParam !== 'latest' && blockParam !== 'pending') {
+					return { isCacheable: true, maxAgeMs: Number.POSITIVE_INFINITY };
+				}
+			}
+			return { isCacheable: true, maxAgeMs: this.config.cache.maxAge * 1000 };
 		}
 		return { isCacheable: false, maxAgeMs: 0 };
 	}

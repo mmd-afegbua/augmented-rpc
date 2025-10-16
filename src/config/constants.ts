@@ -20,10 +20,12 @@ export const CACHEABLE_METHODS = {
     'eth_chainId',
     'net_version',
     'eth_getTransactionReceipt',
+    'eth_getLogs',  // Historical logs never change
   ],
   TIME_CACHEABLE: [
     'eth_blockNumber',
     'eth_call',
+    'eth_getBlockByNumber',  // Only for 'latest'/'pending'
   ],
 } as const;
 

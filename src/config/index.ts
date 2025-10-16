@@ -45,6 +45,7 @@ export class ConfigManager {
         networks: this.loadNetworks(yamlConfig.rpc?.networks),
         batchConcurrencyLimit: parseInt(process.env.BATCH_CONCURRENCY_LIMIT || yamlConfig.rpc?.batch_concurrency_limit || '10', 10),
         batchTimeout: parseInt(process.env.BATCH_TIMEOUT || yamlConfig.rpc?.batch_timeout || '5000', 10),
+        upstreams: this.loadUpstreams(yamlConfig.rpc?.upstreams),
       },
       cache: {
         maxAge: parseInt(process.env.CACHE_MAX_AGE || yamlConfig.cache?.max_age || String(DEFAULT_VALUES.CACHE_MAX_AGE), 10),
@@ -105,9 +106,27 @@ export class ConfigManager {
     if (yamlNetworks && typeof yamlNetworks === 'object') {
       for (const [key, value] of Object.entries(yamlNetworks)) {
         if (typeof value === 'string') {
-          networks[key] = { url: value, timeout: 30000, retries: 3, retry_delay: 1000 };
+          networks[key] = { 
+            url: value, 
+            timeout: 30000, 
+            retries: 3, 
+            retry_delay: 1000 
+          };
         } else if (typeof value === 'object' && value !== null && 'url' in value) {
-          networks[key] = value;
+          // Load network config with fallback support
+          const networkConfig = value as any;
+          networks[key] = {
+            url: networkConfig.url,
+            timeout: networkConfig.timeout || 30000,
+            retries: networkConfig.retries || 3,
+            retry_delay: networkConfig.retry_delay || 1000,
+            priority: networkConfig.priority || 1,
+            // Network-specific fallback
+            fallback_url: networkConfig.fallback_url,
+            fallback_timeout: networkConfig.fallback_timeout || 30000,
+            fallback_retries: networkConfig.fallback_retries || 3,
+            fallback_retry_delay: networkConfig.fallback_retry_delay || 1000,
+          };
         }
       }
     }
@@ -119,9 +138,25 @@ export class ConfigManager {
         if (typeof parsed === 'object' && parsed !== null) {
           for (const [key, value] of Object.entries(parsed)) {
             if (typeof value === 'string') {
-              networks[key] = { url: value, timeout: 30000, retries: 3, retry_delay: 1000 };
+              networks[key] = { 
+                url: value, 
+                timeout: 30000, 
+                retries: 3, 
+                retry_delay: 1000 
+              };
             } else if (typeof value === 'object' && value !== null && 'url' in value) {
-              networks[key] = value;
+              const networkConfig = value as any;
+              networks[key] = {
+                url: networkConfig.url,
+                timeout: networkConfig.timeout || 30000,
+                retries: networkConfig.retries || 3,
+                retry_delay: networkConfig.retry_delay || 1000,
+                priority: networkConfig.priority || 1,
+                fallback_url: networkConfig.fallback_url,
+                fallback_timeout: networkConfig.fallback_timeout || 30000,
+                fallback_retries: networkConfig.fallback_retries || 3,
+                fallback_retry_delay: networkConfig.fallback_retry_delay || 1000,
+              };
             }
           }
         }
@@ -131,6 +166,55 @@ export class ConfigManager {
     }
     
     return networks;
+  }
+
+  private loadUpstreams(yamlUpstreams?: any): { primary: any; fallback: any } | undefined {
+    // Load from YAML config first
+    if (yamlUpstreams && typeof yamlUpstreams === 'object') {
+      const upstreams: { primary: any; fallback: any } = {
+        primary: {
+          url: yamlUpstreams.primary?.url || '',
+          timeout: yamlUpstreams.primary?.timeout || 30000,
+          retries: yamlUpstreams.primary?.retries || 3,
+          retryDelay: yamlUpstreams.primary?.retry_delay || 1000,
+          priority: yamlUpstreams.primary?.priority || 1,
+        },
+        fallback: {
+          url: yamlUpstreams.fallback?.url || '',
+          timeout: yamlUpstreams.fallback?.timeout || 30000,
+          retries: yamlUpstreams.fallback?.retries || 3,
+          retryDelay: yamlUpstreams.fallback?.retry_delay || 1000,
+          priority: yamlUpstreams.fallback?.priority || 2,
+        },
+      };
+      
+      // Only return if both URLs are configured
+      if (upstreams.primary.url && upstreams.fallback.url) {
+        return upstreams;
+      }
+    }
+    
+    // Override with environment variables if present
+    if (process.env.PRIMARY_RPC_URL && process.env.FALLBACK_RPC_URL) {
+      return {
+        primary: {
+          url: process.env.PRIMARY_RPC_URL,
+          timeout: parseInt(process.env.PRIMARY_RPC_TIMEOUT || '30000', 10),
+          retries: parseInt(process.env.PRIMARY_RPC_RETRIES || '3', 10),
+          retryDelay: parseInt(process.env.PRIMARY_RPC_RETRY_DELAY || '1000', 10),
+          priority: parseInt(process.env.PRIMARY_RPC_PRIORITY || '1', 10),
+        },
+        fallback: {
+          url: process.env.FALLBACK_RPC_URL,
+          timeout: parseInt(process.env.FALLBACK_RPC_TIMEOUT || '30000', 10),
+          retries: parseInt(process.env.FALLBACK_RPC_RETRIES || '3', 10),
+          retryDelay: parseInt(process.env.FALLBACK_RPC_RETRY_DELAY || '1000', 10),
+          priority: parseInt(process.env.FALLBACK_RPC_PRIORITY || '2', 10),
+        },
+      };
+    }
+    
+    return undefined;
   }
 
   private validateConfig(): void {

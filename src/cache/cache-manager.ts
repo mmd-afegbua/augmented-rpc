@@ -139,16 +139,7 @@ export class CacheManager {
         // Update read count
         cachedEntry.readCnt++;
         this.cache.set(key, cachedEntry);
-        
-        this.logger.debug('Memory cache hit', { 
-          key, 
-          requestId, 
-          compressed: cachedEntry.compressed,
-          originalSize: cachedEntry.originalSize,
-          compressedSize: cachedEntry.compressedSize
-        });
       } else {
-        this.logger.debug('Memory cache entry expired', { key, maxAgeMs });
         this.cache.delete(key); // Remove expired entry
       }
     } 
@@ -157,8 +148,6 @@ export class CacheManager {
       try {
         const row = await this.dbCache.get(key);
         if (row && Date.now() - row.ts <= maxAgeMs) {
-          this.logger.debug('Database cache hit', { key, requestId });
-          
           // Parse the cached data
           val = JSON.parse(row.val);
           

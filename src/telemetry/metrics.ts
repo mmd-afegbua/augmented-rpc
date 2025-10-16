@@ -12,10 +12,16 @@ export class PrometheusMetrics {
 	cacheMissesTotal!: client.Counter<string>;
 	requestDurationMs!: client.Histogram<string>;
 	responseSizeBytes!: client.Histogram<string>;
-	activeConnections!: client.Gauge<string>;
-	circuitBreakerState!: client.Gauge<string>;
-	queueSize!: client.Gauge<string>;
-	queuePending!: client.Gauge<string>;
+	
+	// Primary/Fallback upstream metrics
+	fallbackRequestsTotal!: client.Counter<string>;
+	upstreamResponseTime!: client.Histogram<string>;
+	networkRequestsTotal!: client.Counter<string>;
+	routingDecisionsTotal!: client.Counter<string>;
+	archiveNodeRequestsTotal!: client.Counter<string>;
+	
+	// Cache quality metrics
+	cacheInvalidEntriesTotal!: client.Counter<string>;
 
 	static getInstance(): PrometheusMetrics {
 		if (!this.instance) {
@@ -26,11 +32,6 @@ export class PrometheusMetrics {
 
 	init(): void {
 		if (this.initialized) return;
-
-		// Default process metrics
-		client.collectDefaultMetrics({
-			prefix: 'rpc_',
-		});
 
 		this.requestsTotal = new client.Counter({
 			name: 'rpc_http_requests_total',
@@ -76,28 +77,43 @@ export class PrometheusMetrics {
 			buckets: [100, 1000, 10000, 100000, 1000000, 10000000],
 		});
 
-		this.activeConnections = new client.Gauge({
-			name: 'rpc_active_connections',
-			help: 'Number of active connections',
-			labelNames: ['network'],
+		// Primary/Fallback upstream metrics
+		this.fallbackRequestsTotal = new client.Counter({
+			name: 'rpc_fallback_requests_total',
+			help: 'Total requests that used fallback upstream',
+			labelNames: ['network', 'upstream_type', 'reason'],
 		});
 
-		this.circuitBreakerState = new client.Gauge({
-			name: 'rpc_circuit_breaker_state',
-			help: 'Circuit breaker state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)',
-			labelNames: ['network'],
+		this.upstreamResponseTime = new client.Histogram({
+			name: 'rpc_upstream_response_time_ms',
+			help: 'Response time per upstream in milliseconds',
+			labelNames: ['network', 'upstream_type'],
+			buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000],
 		});
 
-		this.queueSize = new client.Gauge({
-			name: 'rpc_queue_size',
-			help: 'Number of requests in queue',
-			labelNames: ['network'],
+		this.networkRequestsTotal = new client.Counter({
+			name: 'rpc_network_requests_total',
+			help: 'Total requests per network',
+			labelNames: ['network', 'method'],
 		});
 
-		this.queuePending = new client.Gauge({
-			name: 'rpc_queue_pending',
-			help: 'Number of pending requests in queue',
-			labelNames: ['network'],
+		this.routingDecisionsTotal = new client.Counter({
+			name: 'rpc_routing_decisions_total',
+			help: 'Total routing decisions made',
+			labelNames: ['network', 'upstream_type', 'reason'],
+		});
+
+		this.archiveNodeRequestsTotal = new client.Counter({
+			name: 'rpc_archive_node_requests_total',
+			help: 'Total requests that required archive node',
+			labelNames: ['network', 'method'],
+		});
+
+		// Cache quality metrics
+		this.cacheInvalidEntriesTotal = new client.Counter({
+			name: 'rpc_cache_invalid_entries_total',
+			help: 'Total invalid entries that were not cached',
+			labelNames: ['network', 'method', 'reason'],
 		});
 
 		this.initialized = true;
@@ -105,5 +121,30 @@ export class PrometheusMetrics {
 
 	getRegister(): typeof client.register {
 		return client.register;
+	}
+
+	// Helper methods for common metric operations
+	recordFallbackRequest(network: string, upstreamType: string, reason: string): void {
+		this.fallbackRequestsTotal.labels(network, upstreamType, reason).inc();
+	}
+
+	recordRoutingDecision(network: string, upstreamType: string, reason: string): void {
+		this.routingDecisionsTotal.labels(network, upstreamType, reason).inc();
+	}
+
+	recordArchiveNodeRequest(network: string, method: string): void {
+		this.archiveNodeRequestsTotal.labels(network, method).inc();
+	}
+
+	recordNetworkRequest(network: string, method: string): void {
+		this.networkRequestsTotal.labels(network, method).inc();
+	}
+
+	recordUpstreamResponseTime(network: string, upstreamType: string, duration: number): void {
+		this.upstreamResponseTime.labels(network, upstreamType).observe(duration);
+	}
+
+	recordCacheInvalidEntry(network: string, method: string, reason: string): void {
+		this.cacheInvalidEntriesTotal.labels(network, method, reason).inc();
 	}
 } 

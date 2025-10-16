@@ -1,60 +1,116 @@
-# Sample RPC Proxy Configuration
-# Copy this file to config.yaml and customize for your needs
+# RPC Proxy Configuration Sample
+# Copy this file to config.yaml and customize as needed
+# Comments indicate whether each setting is REQUIRED or OPTIONAL
 
+# Server Configuration (OPTIONAL - all have defaults)
 server:
-  port: 3000
-  host: "0.0.0.0"
-  environment: "production"
+  port: 3000                    # OPTIONAL: Server port (default: 3000)
+  host: "0.0.0.0"              # OPTIONAL: Server host (default: "0.0.0.0")
+  environment: "production"     # OPTIONAL: Environment (default: "development")
 
+# RPC Configuration
 rpc:
-  # Single RPC URL (for simple setups)
+  # Single RPC URL (OPTIONAL - used as fallback if upstreams not configured)
   url: "https://mainnet.base.org"
   
-  # Multi-network configuration (for advanced setups)
+  # Primary/Fallback upstream configuration (REQUIRED for fallback support)
+  upstreams:
+    primary:
+      url: "https://mainnet.base.org"           # REQUIRED: Primary upstream URL (typically non-archive)
+      timeout: 30000                           # OPTIONAL: Request timeout in ms (default: 30000)
+      retries: 3                               # OPTIONAL: Number of retries (default: 3)
+      retry_delay: 1000                        # OPTIONAL: Delay between retries in ms (default: 1000)
+      priority: 1                              # OPTIONAL: Priority level (default: 1)
+    fallback:
+      url: "https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"  # REQUIRED: Fallback upstream URL (typically archive)
+      timeout: 30000                           # OPTIONAL: Request timeout in ms (default: 30000)
+      retries: 3                               # OPTIONAL: Number of retries (default: 3)
+      retry_delay: 1000                        # OPTIONAL: Delay between retries in ms (default: 1000)
+      priority: 2                              # OPTIONAL: Priority level (default: 2)
+  
+  # Multi-network configuration (OPTIONAL - for advanced setups)
   networks:
     base-mainnet:
-      url: "https://mainnet.base.org"
-      timeout: 30000
-      retries: 3
-      retry_delay: 1000
+      url: "https://mainnet.base.org"          # REQUIRED: Network RPC URL
+      timeout: 30000                          # OPTIONAL: Network-specific timeout (default: 30000)
+      retries: 3                              # OPTIONAL: Network-specific retries (default: 3)
+      retry_delay: 1000                       # OPTIONAL: Network-specific retry delay (default: 1000)
     polygon-mainnet:
       url: "https://polygon-rpc.com"
       timeout: 30000
       retries: 3
       retry_delay: 1000
     scroll-sepolia:
-      url: "https://scroll-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+      url: "https://scroll-sepolia.g.alchemy.com"
       timeout: 30000
       retries: 3
       retry_delay: 1000
     ethereum-mainnet:
-      url: "https://mainnet.infura.io/v3/YOUR_API_KEY"
+      url: "https://mainnet.infura.io/v3/YOUR_KEY"
       timeout: 30000
       retries: 3
       retry_delay: 1000
   
-  # Global RPC settings
-  timeout: 30000
-  retries: 3
-  initial_timeout_ms: 5000
-  batch_concurrency_limit: 10
-  batch_timeout: 5000
+  # Global RPC settings (OPTIONAL - all have defaults)
+  timeout: 30000                               # OPTIONAL: Default timeout in ms (default: 30000)
+  retries: 3                                   # OPTIONAL: Default retries (default: 3)
+  initial_timeout_ms: 5000                     # OPTIONAL: Initial timeout in ms (default: 5000)
+  batch_concurrency_limit: 10                  # OPTIONAL: Max concurrent batch requests (default: 10)
+  batch_timeout: 5000                          # OPTIONAL: Batch request timeout in ms (default: 5000)
 
+# Cache Configuration (OPTIONAL - all have defaults)
 cache:
-  max_age: 300000  # 5 minutes
-  db_file: "./cache.db"
-  max_size: 1000
-  enable_db: true
+  max_age: 300000                              # OPTIONAL: Cache TTL in ms (default: 300000 = 5 minutes)
+  db_file: "./cache.db"                        # OPTIONAL: SQLite database file (default: "./cache.db")
+  max_size: 1000                               # OPTIONAL: Max cache entries (default: 1000)
+  enable_db: true                              # OPTIONAL: Enable database cache (default: true)
 
+# Rate Limiting Configuration (OPTIONAL - all have defaults)
 rate_limit:
-  window_ms: 60000  # 1 minute
-  max_requests: 100
+  window_ms: 60000                             # OPTIONAL: Rate limit window in ms (default: 60000 = 1 minute)
+  max_requests: 100                            # OPTIONAL: Max requests per window (default: 100)
 
+# CORS Configuration (OPTIONAL - all have defaults)
 cors:
-  enabled: true
-  origin: "*"
-  credentials: false
+  enabled: true                                # OPTIONAL: Enable CORS (default: true)
+  origin: "*"                                  # OPTIONAL: Allowed origins (default: "*")
+  credentials: false                           # OPTIONAL: Allow credentials (default: false)
 
+# Security Headers Configuration (OPTIONAL - all have defaults)
 helmet:
-  enabled: true
-  content_security_policy: true
+  enabled: true                                # OPTIONAL: Enable security headers (default: true)
+  content_security_policy: true                # OPTIONAL: Enable CSP (default: true)
+
+# Environment Variables Override Examples:
+# You can override any of these settings using environment variables:
+# 
+# Server:
+#   PORT=3000
+#   HOST=0.0.0.0
+#   NODE_ENV=production
+#
+# RPC:
+#   RPC_URL=https://mainnet.base.org
+#   RPC_TIMEOUT=30000
+#   RPC_RETRIES=3
+#   PRIMARY_RPC_URL=https://mainnet.base.org
+#   FALLBACK_RPC_URL=https://base-mainnet.g.alchemy.com/v2/YOUR_KEY
+#
+# Cache:
+#   CACHE_MAX_AGE=300000
+#   DB_FILE=./cache.db
+#   CACHE_MAX_SIZE=1000
+#   ENABLE_DB_CACHE=true
+#
+# Rate Limiting:
+#   RATE_LIMIT_WINDOW=60000
+#   RATE_LIMIT_MAX=100
+#
+# CORS:
+#   CORS_ENABLED=true
+#   CORS_ORIGIN=*
+#   CORS_CREDENTIALS=false
+#
+# Security:
+#   HELMET_ENABLED=true
+#   HELMET_CSP=true

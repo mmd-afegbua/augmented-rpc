@@ -8,58 +8,132 @@ A high-performance JSON-RPC proxy optimized for **subgraph syncing** and EVM blo
 # Install dependencies
 npm install
 
-# Copy and configure
+# Copy and configure (minimal setup)
 cp config.sample.yaml config.yaml
-# Edit config.yaml with your RPC URLs
+# Edit config.yaml with your upstream URLs
 
 # Build and run
 npm run build
 npm start
 ```
 
-## ⚙️ Configuration
+### Quick Configuration
 
-### YAML Configuration (Recommended)
-
-Create a `config.yaml` file in the project root:
+For the primary/fallback upstream system, you only need to configure:
 
 ```yaml
-server:
-  port: 3000
-  host: "0.0.0.0"
-
 rpc:
-  # Single RPC URL
-  url: "https://mainnet.base.org"
-  
-  # Multi-network setup
-  networks:
-    base-mainnet:
-      url: "https://mainnet.base.org"
-      timeout: 30000
-      retries: 3
-    polygon-mainnet:
-      url: "https://polygon-rpc.com"
-      timeout: 30000
-      retries: 3
-
-cache:
-  max_age: 300000  # 5 minutes
-  enable_db: true
-
-rate_limit:
-  window_ms: 60000
-  max_requests: 100
-
-cors:
-  enabled: true
-  origin: "*"
-  credentials: false
-
-helmet:
-  enabled: true
-  content_security_policy: true
+  upstreams:
+    primary:
+      url: "https://mainnet.base.org"  # Primary upstream (typically non-archive)
+    fallback:
+      url: "https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"  # Fallback upstream (typically archive)
 ```
+
+All other settings use sensible defaults. See `config.sample.yaml` for all available options.
+
+## 🔄 Primary/Fallback Upstream System
+
+The proxy now supports intelligent fallback between primary and fallback upstreams to ensure data availability and optimize performance.
+
+### Key Features
+
+- **Automatic Fallback**: Automatically falls back to secondary upstream when primary fails
+- **Error-Based Detection**: Detects when data is not available on primary node
+- **Smart Error Analysis**: Analyzes error messages to determine if fallback is needed
+- **Performance Optimization**: Uses primary upstream for all requests, falls back only when needed
+- **Transparent Operation**: No upfront prediction required - system learns from actual responses
+
+### How It Works
+
+1. **Primary First**: All requests start with the primary upstream
+2. **Error Detection**: When primary fails, the system analyzes the error message
+3. **Smart Fallback**: If the error indicates data is not available (e.g., "block not found", "historical data not available"), it automatically tries the fallback upstream
+4. **Transparent Recovery**: Users get the data they need without knowing which upstream provided it
+
+### Error Patterns That Trigger Fallback
+
+The system detects these error patterns and automatically falls back:
+- "block not found"
+- "transaction not found" 
+- "receipt not found"
+- "logs not found"
+- "state not found"
+- "data not available"
+- "block range not available"
+- "historical data not available"
+- "only recent blocks available"
+- "archive node required"
+
+### Configuration
+
+Configure primary/fallback upstreams in your `config.yaml`:
+
+```yaml
+rpc:
+  upstreams:
+    primary:
+      url: "https://mainnet.base.org"  # Primary upstream (typically non-archive)
+      timeout: 30000
+      retries: 3
+      retry_delay: 1000
+      priority: 1
+    fallback:
+      url: "https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"  # Fallback upstream (typically archive)
+      timeout: 30000
+      retries: 3
+      retry_delay: 1000
+      priority: 2
+```
+
+### Environment Variables
+
+You can also configure upstreams via environment variables:
+
+```bash
+# Primary upstream (typically non-archive)
+PRIMARY_RPC_URL="https://mainnet.base.org"
+PRIMARY_RPC_TIMEOUT="30000"
+PRIMARY_RPC_RETRIES="3"
+
+# Fallback upstream (typically archive)
+FALLBACK_RPC_URL="https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"
+FALLBACK_RPC_TIMEOUT="30000"
+FALLBACK_RPC_RETRIES="3"
+```
+
+### Testing the System
+
+Use the provided test script to verify the routing behavior:
+
+```bash
+./test-fallback-system.sh
+```
+
+This will test various request types and show which upstream is being used for each request.
+
+## ⚙️ Configuration
+
+### Minimal Configuration
+
+The proxy uses sensible defaults for most settings. You only need to configure the essential parts:
+
+```yaml
+# Minimal config.yaml - only essential settings
+rpc:
+  upstreams:
+    primary:
+      url: "https://mainnet.base.org"  # Non-archive node
+      is_archive: false
+    fallback:
+      url: "https://base-mainnet.g.alchemy.com/v2/YOUR_KEY"  # Archive node
+      is_archive: true
+```
+
+### Full Configuration Options
+
+For advanced setups, see `config.sample.yaml` which includes all available options with clear comments indicating what's required vs optional.
+
 
 ### Configuration File Locations
 
