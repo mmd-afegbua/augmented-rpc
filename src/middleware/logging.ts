@@ -82,13 +82,7 @@ export function createPerformanceLogger(logger: Logger, slowRequestThreshold: nu
         });
       }
 
-      // Log performance metrics
-      logger.debug('Request performance', {
-        requestId,
-        duration: Math.round(duration * 100) / 100, // Round to 2 decimal places
-        method: req.method,
-        statusCode: res.statusCode,
-      });
+      // Performance metrics are already captured by Prometheus - no need to log
     });
 
     next();

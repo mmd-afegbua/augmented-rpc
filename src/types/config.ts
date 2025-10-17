@@ -15,6 +15,7 @@ export interface ServerConfig {
   port: number;
   host: string;
   environment: string;
+  log_level?: string;
 }
 
 export interface RPCConfig {

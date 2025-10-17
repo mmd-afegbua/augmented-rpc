@@ -13,13 +13,32 @@ export class Logger {
   }
 
   static getInstance(config?: ProxyConfig): Logger {
-    if (!Logger.instance && config) {
+    if (!Logger.instance) {
+      if (!config) {
+        throw new Error('Logger must be initialized with config on first call');
+      }
       Logger.instance = new Logger(config);
     }
     return Logger.instance;
   }
 
+  private validateLogLevel(level: string): string {
+    const validLevels = ['error', 'warn', 'info', 'debug', 'silly'];
+    const normalizedLevel = level.toLowerCase().trim();
+    
+    if (validLevels.includes(normalizedLevel)) {
+      return normalizedLevel;
+    }
+    
+    console.warn(`Invalid log level "${level}", defaulting to "info"`);
+    return 'info';
+  }
+
   private createLogger(config: ProxyConfig): winston.Logger {
+    // Get log level from config and validate it
+    const configLogLevel = config.server.log_level || 'info';
+    const logLevel = this.validateLogLevel(configLogLevel);
+    
     const transports: winston.transport[] = [];
 
     // Production file transports
@@ -27,7 +46,7 @@ export class Logger {
       transports.push(
         new winston.transports.File({
           filename: 'logs/error.log',
-          level: 'error',
+          level: logLevel, // Use the configured log level
           maxsize: 10485760, // 10MB
           maxFiles: 5,
           format: winston.format.combine(
@@ -38,6 +57,7 @@ export class Logger {
         }),
         new winston.transports.File({
           filename: 'logs/combined.log',
+          level: logLevel, // Use the configured log level
           maxsize: 10485760,
           maxFiles: 5,
           format: winston.format.combine(
@@ -49,24 +69,23 @@ export class Logger {
       );
     }
 
-    // Console transport for development
-    if (config.server.environment === 'development') {
-      transports.push(
-        new winston.transports.Console({
-          format: winston.format.combine(
-            winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-            winston.format.colorize(),
-            winston.format.printf(({ timestamp, level, message, ...meta }) => {
-              const metaStr = Object.keys(meta).length > 0 ? JSON.stringify(meta) : '';
-              return `[${timestamp}] ${level}: ${message} ${metaStr}`;
-            })
-          ),
-        })
-      );
-    }
+    // Console transport for all environments
+    transports.push(
+      new winston.transports.Console({
+        level: logLevel, // Ensure console transport respects the log level
+        format: winston.format.combine(
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+          winston.format.colorize(),
+          winston.format.printf(({ timestamp, level, message, ...meta }) => {
+            const metaStr = Object.keys(meta).length > 0 ? JSON.stringify(meta) : '';
+            return `[${timestamp}] ${level}: ${message} ${metaStr}`;
+          })
+        ),
+      })
+    );
 
     return winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
+      level: logLevel,
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.errors({ stack: true }),

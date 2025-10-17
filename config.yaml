@@ -5,6 +5,7 @@ server:
   port: 3000
   host: "0.0.0.0"
   environment: "production"
+  log_level: "debug"
 
 rpc:
   # Single RPC URL (for simple setups)

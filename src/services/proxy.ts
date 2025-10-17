@@ -403,7 +403,6 @@ export class RPCProxy {
 					this.metrics.cacheHitsTotal.labels(methodLabel).inc();
 					this.metrics.requestsTotal.labels(methodLabel, 'HIT', 'success').inc();
 					this.metrics.requestDurationMs.labels(methodLabel, 'HIT').observe(duration);
-					// Use debug level for cache hits to reduce overhead
 					this.logger.debug('RPC served from cache', {
 						requestId: (req as any).requestId,
 						network: networkKey || 'default',

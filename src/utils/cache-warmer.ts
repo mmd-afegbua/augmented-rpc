@@ -23,7 +23,7 @@ export class CacheWarmer {
 
 	start(): void {
 		if (!this.config.enabled) {
-			this.logger.debug('Cache warming disabled');
+		// Cache warming disabled - no logging needed
 			return;
 		}
 

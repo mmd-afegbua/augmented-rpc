@@ -33,6 +33,7 @@ export class ConfigManager {
         port: parseInt(process.env.PORT || yamlConfig.server?.port || String(DEFAULT_VALUES.PORT), 10),
         host: process.env.HOST || yamlConfig.server?.host || DEFAULT_VALUES.HOST,
         environment: process.env.NODE_ENV || yamlConfig.server?.environment || 'development',
+        log_level: process.env.LOG_LEVEL || yamlConfig.server?.log_level || 'info',
       },
       rpc: {
         url: process.env.RPC_URL || yamlConfig.rpc?.url || '',
