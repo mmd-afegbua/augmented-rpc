@@ -46,6 +46,10 @@ export class RPCProxy {
 	// Request routing for primary/fallback upstreams
 	private readonly requestRouter?: RequestRouter;
 	
+	// Block-level consistency tracking
+	private readonly blockProviderMap: Map<string, string> = new Map(); // blockHash -> providerUrl
+	private readonly blockConsistencyTimeout = 300000; // 5 minutes
+	
 	
 	private stats: ProxyStats = {
 		httpRequestsProcessed: 0,
@@ -159,7 +163,13 @@ export class RPCProxy {
 		return this.networkMap[key];
 	}
 
-	private getUpstreamUrl(networkKey?: string): string {
+	private getUpstreamUrl(request: JSONRPCRequest, networkKey?: string): string {
+		// Check for block-level consistency first
+		const consistentProvider = this.getConsistentProviderForBlock(request, networkKey);
+		if (consistentProvider) {
+			return consistentProvider;
+		}
+		
 		// If request router is available, use it to determine the best upstream
 		if (this.requestRouter) {
 			const routingDecision = this.requestRouter.routeRequest(networkKey);
@@ -333,7 +343,7 @@ export class RPCProxy {
 				return;
 			}
 
-			const upstreamUrl = this.getUpstreamUrl(networkKey);
+			const upstreamUrl = this.getUpstreamUrl(body, networkKey);
 			const response = await this.processSingleRequest(req, body, start, networkKey, upstreamUrl);
 			res.status(HTTP_STATUS.OK).json(response);
 		} catch (err: any) {
@@ -372,7 +382,7 @@ export class RPCProxy {
 		for (let i = 0; i < optimizedRequests.length; i += concurrencyLimit) {
 			const chunk = optimizedRequests.slice(i, i + concurrencyLimit);
 			const chunkPromises = chunk.map(request => {
-				const upstreamUrl = this.getUpstreamUrl(networkKey);
+				const upstreamUrl = this.getUpstreamUrl(request, networkKey);
 				return this.processSingleRequest(req, request, startTs, networkKey, upstreamUrl);
 			});
 			
@@ -572,6 +582,15 @@ export class RPCProxy {
 						duration
 					);
 
+					// Record block-level consistency for successful responses
+					if (request.method === 'eth_getBlockReceipts' || request.method === 'eth_getBlockByHash') {
+						const params = Array.isArray(request.params) ? request.params : [];
+						if (params.length > 0 && typeof params[0] === 'string' && params[0].startsWith('0x')) {
+							const providerUrl = finalTargetUrl || targetUrl || this.getUpstreamUrl(request, networkKey);
+							this.setConsistentProviderForBlock(params[0], providerUrl);
+						}
+					}
+
 					this.logger.info('RPC forwarded to upstream', {
 						requestId: (req as any).requestId,
 						network: networkKey || 'default',
@@ -632,11 +651,50 @@ export class RPCProxy {
 		return wrapped;
 	}
 
-	private isProblematicResponse(result: any): boolean {
-		// Don't cache empty arrays (might indicate no data available)
-		if (Array.isArray(result) && result.length === 0) {
-			return true;
+	private getConsistentProviderForBlock(request: JSONRPCRequest, networkKey?: string): string | null {
+		// Extract block hash from request if available
+		let blockHash: string | null = null;
+		
+		if (request.method === 'eth_getBlockReceipts' || request.method === 'eth_getBlockByHash') {
+			const params = Array.isArray(request.params) ? request.params : [];
+			if (params.length > 0 && typeof params[0] === 'string' && params[0].startsWith('0x')) {
+				blockHash = params[0];
+			}
 		}
+		
+		if (!blockHash) return null;
+		
+		// Check if we have a consistent provider for this block
+		const cachedProvider = this.blockProviderMap.get(blockHash);
+		if (cachedProvider) {
+			this.logger.debug('Using consistent provider for block', {
+				blockHash,
+				provider: cachedProvider,
+				method: request.method,
+				network: networkKey || 'default'
+			});
+			return cachedProvider;
+		}
+		
+		return null;
+	}
+
+	private setConsistentProviderForBlock(blockHash: string, providerUrl: string): void {
+		this.blockProviderMap.set(blockHash, providerUrl);
+		
+		// Clean up old entries after timeout
+		setTimeout(() => {
+			this.blockProviderMap.delete(blockHash);
+		}, this.blockConsistencyTimeout);
+		
+		this.logger.debug('Set consistent provider for block', {
+			blockHash,
+			provider: providerUrl,
+			timeout: this.blockConsistencyTimeout
+		});
+	}
+
+	private isProblematicResponse(result: any): boolean {
 		
 		// Don't cache empty objects (might indicate incomplete data)
 		if (typeof result === 'object' && result !== null && Object.keys(result).length === 0) {
