@@ -35,6 +35,13 @@ export const DUPLICATE_REQUEST_CONFIG = {
   RANDOM_MAX_EXTRA_DELAY_MS: 1000,
 } as const;
 
+export const BLOCK_TOLERANCE_CONFIG = {
+  MAX_BLOCK_DIFFERENCE: Number.POSITIVE_INFINITY,  // Infinite tolerance for RPC resync scenarios
+  SUBGRAPH_BLOCK_TOLERANCE: Number.POSITIVE_INFINITY,  // Infinite tolerance for subgraph requests
+  RETRY_ON_BLOCK_MISMATCH: true,
+  FALLBACK_ON_BLOCK_MISMATCH: true,
+} as const;
+
 export const HTTP_STATUS = {
   OK: 200,
   BAD_REQUEST: 400,

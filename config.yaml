@@ -1,4 +1,11 @@
 rpc:
+  # Block tolerance settings for handling RPC provider differences
+  block_tolerance:
+    max_difference: infinite  # Infinite tolerance for RPC resync scenarios
+    subgraph_tolerance: infinite  # Infinite tolerance for subgraph requests
+    retry_on_mismatch: true
+    fallback_on_mismatch: true
+  
   networks:
     base-mainnet:
       url: "https://base-mainnet.sfrpc.x.superfluid.dev"

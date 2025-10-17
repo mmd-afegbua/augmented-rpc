@@ -46,6 +46,9 @@ export class RPCProxy {
 	// Request routing for primary/fallback upstreams
 	private readonly requestRouter?: RequestRouter;
 	
+	// Block number cache for normalizing "latest" calls
+	private readonly blockNumberCache: Map<string, { blockNumber: number; timestamp: number }> = new Map();
+	
 	private stats: ProxyStats = {
 		httpRequestsProcessed: 0,
 		httpUpstreamResponses: 0,
@@ -411,12 +414,15 @@ export class RPCProxy {
 
 	private async processSingleRequest(req: Request, request: JSONRPCRequest, startTs: number, networkKey?: string, targetUrl?: string): Promise<JSONRPCResponse> {
 		const keyPrefix = networkKey ? `${networkKey}:` : '';
-		const cacheKey = keyPrefix + this.cacheManager.getCacheKey(request);
+		
+		// Normalize block tags for consistency across RPC providers
+		const normalizedRequest = this.normalizeBlockTags(request, networkKey);
+		const cacheKey = keyPrefix + this.cacheManager.getCacheKey(normalizedRequest);
 
-		const { isCacheable, maxAgeMs } = this.resolveCachePolicyForSubgraph(request);
+		const { isCacheable, maxAgeMs } = this.resolveCachePolicyForSubgraph(normalizedRequest);
 		
 		// Record network request metric
-		this.metrics.recordNetworkRequest(networkKey || 'default', request.method);
+		this.metrics.recordNetworkRequest(networkKey || 'default', normalizedRequest.method);
 		
 		// Optimize inflight key generation for common methods
 		const inflightKey = this.generateInflightKey(keyPrefix, request);
@@ -629,6 +635,53 @@ export class RPCProxy {
 
 		this.inflight.set(inflightKey, wrapped);
 		return wrapped;
+	}
+
+	private normalizeBlockTags(request: JSONRPCRequest, networkKey?: string): JSONRPCRequest {
+		// For eth_call requests with "latest" block tag, get current block number
+		if (request.method === 'eth_call' && Array.isArray(request.params) && request.params.length >= 2) {
+			const blockTag = request.params[1];
+			if (blockTag === 'latest' || blockTag === 'pending') {
+				// Create a normalized request with specific block number
+				// We'll use a cached block number to ensure consistency
+				const normalizedRequest = { ...request };
+				const normalizedParams = [...request.params];
+				
+				// Get the current block number from cache or use a recent stable block
+				const currentBlock = this.getCurrentBlockNumber(networkKey);
+				if (currentBlock) {
+					normalizedParams[1] = `0x${currentBlock.toString(16)}`;
+					normalizedRequest.params = normalizedParams;
+					
+					this.logger.debug('Normalized block tag for consistency', {
+						method: request.method,
+						originalBlockTag: blockTag,
+						normalizedBlockTag: normalizedParams[1],
+						network: networkKey || 'default',
+						requestId: (request as any).requestId
+					});
+				}
+				
+				return normalizedRequest;
+			}
+		}
+		return request;
+	}
+
+	private getCurrentBlockNumber(networkKey?: string): number | null {
+		const network = networkKey || 'default';
+		const cached = this.blockNumberCache.get(network);
+		
+		if (cached) {
+			// Use cached block number if it's less than 30 seconds old
+			const age = Date.now() - cached.timestamp;
+			if (age < 30000) { // 30 seconds
+				return cached.blockNumber;
+			}
+		}
+		
+		// Return null to let upstream handle it
+		return null;
 	}
 
 	private isProblematicResponse(result: any): boolean {

@@ -102,11 +102,33 @@ export class RequestRouter {
       'archive node required'
     ];
 
+    // Block tolerance error patterns that indicate RPC provider sync issues
+    const blockTolerancePatterns = [
+      'block.*returned.*is after.*last block',
+      'non-deterministic error',
+      'block.*is after.*requested range',
+      'block ordering error',
+      'deterministic error'
+    ];
+
     const needsArchive = archiveErrorPatterns.some(pattern => 
       errorMessage.includes(pattern) || errorData.includes(pattern)
     );
 
-    return needsArchive;
+    const hasBlockToleranceIssue = blockTolerancePatterns.some(pattern => {
+      const regex = new RegExp(pattern, 'i');
+      return regex.test(errorMessage) || regex.test(errorData);
+    });
+
+    // For eth_call with "latest" block tag, also check for block tolerance issues
+    if (request.method === 'eth_call' && Array.isArray(request.params) && request.params.length >= 2) {
+      const blockTag = request.params[1];
+      if (blockTag === 'latest' && hasBlockToleranceIssue) {
+        return true;
+      }
+    }
+
+    return needsArchive || hasBlockToleranceIssue;
   }
 
   /**
