@@ -21,6 +21,12 @@ export const CACHEABLE_METHODS = {
     'net_version',
     'eth_getTransactionReceipt',
     'eth_getLogs',  // Historical logs never change
+    'eth_getBlockReceipts',  // Block receipts never change
+    'eth_getBlockByHash',  // Block data never changes
+    'eth_getTransaction',  // Transaction data never changes
+    'eth_getCode',  // Contract bytecode never changes
+    'eth_getBalance',  // Account balance at specific block never changes
+    'eth_getStorageAt',  // Contract storage at specific block never changes
   ],
   TIME_CACHEABLE: [
     'eth_blockNumber',
@@ -33,13 +39,6 @@ export const DUPLICATE_REQUEST_CONFIG = {
   DELAY_TRIGGER_THRESHOLD_MS: 1000,
   MIN_DELAY_MS: 500,
   RANDOM_MAX_EXTRA_DELAY_MS: 1000,
-} as const;
-
-export const BLOCK_TOLERANCE_CONFIG = {
-  MAX_BLOCK_DIFFERENCE: Number.POSITIVE_INFINITY,  // Infinite tolerance for RPC resync scenarios
-  SUBGRAPH_BLOCK_TOLERANCE: Number.POSITIVE_INFINITY,  // Infinite tolerance for subgraph requests
-  RETRY_ON_BLOCK_MISMATCH: true,
-  FALLBACK_ON_BLOCK_MISMATCH: true,
 } as const;
 
 export const HTTP_STATUS = {

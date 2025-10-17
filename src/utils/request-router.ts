@@ -1,5 +1,4 @@
 import { JSONRPCRequest } from '@/types';
-import { Logger } from './logger';
 
 export interface UpstreamConfig {
   url: string;
@@ -20,8 +19,7 @@ export class RequestRouter {
 
   constructor(
     globalUpstreams: { primary: UpstreamConfig; fallback: UpstreamConfig } | undefined,
-    networks: Record<string, any>,
-    _logger: Logger
+    networks: Record<string, any>
   ) {
     this.globalUpstreams = globalUpstreams;
     this.networks = networks;
@@ -99,36 +97,18 @@ export class RequestRouter {
       'block range not available',
       'historical data not available',
       'only recent blocks available',
-      'archive node required'
-    ];
-
-    // Block tolerance error patterns that indicate RPC provider sync issues
-    const blockTolerancePatterns = [
-      'block.*returned.*is after.*last block',
-      'non-deterministic error',
-      'block.*is after.*requested range',
-      'block ordering error',
-      'deterministic error'
+      'archive node required',
+      'no historical RPC is available',
+      'historical.*execution request'
     ];
 
     const needsArchive = archiveErrorPatterns.some(pattern => 
       errorMessage.includes(pattern) || errorData.includes(pattern)
     );
 
-    const hasBlockToleranceIssue = blockTolerancePatterns.some(pattern => {
-      const regex = new RegExp(pattern, 'i');
-      return regex.test(errorMessage) || regex.test(errorData);
-    });
-
-    // For eth_call with "latest" block tag, also check for block tolerance issues
-    if (request.method === 'eth_call' && Array.isArray(request.params) && request.params.length >= 2) {
-      const blockTag = request.params[1];
-      if (blockTag === 'latest' && hasBlockToleranceIssue) {
-        return true;
-      }
-    }
-
-    return needsArchive || hasBlockToleranceIssue;
+    // With infinite block tolerance, we don't trigger fallback for block differences
+    // Only trigger fallback for actual archive node needs, not block tolerance issues
+    return needsArchive;
   }
 
   /**
