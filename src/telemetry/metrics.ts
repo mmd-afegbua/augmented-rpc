@@ -12,10 +12,6 @@ export class PrometheusMetrics {
 	cacheMissesTotal!: client.Counter<string>;
 	requestDurationMs!: client.Histogram<string>;
 	responseSizeBytes!: client.Histogram<string>;
-	activeConnections!: client.Gauge<string>;
-	circuitBreakerState!: client.Gauge<string>;
-	queueSize!: client.Gauge<string>;
-	queuePending!: client.Gauge<string>;
 
 	static getInstance(): PrometheusMetrics {
 		if (!this.instance) {
@@ -74,30 +70,6 @@ export class PrometheusMetrics {
 			help: 'Size of RPC responses in bytes',
 			labelNames: ['method'],
 			buckets: [100, 1000, 10000, 100000, 1000000, 10000000],
-		});
-
-		this.activeConnections = new client.Gauge({
-			name: 'rpc_active_connections',
-			help: 'Number of active connections',
-			labelNames: ['network'],
-		});
-
-		this.circuitBreakerState = new client.Gauge({
-			name: 'rpc_circuit_breaker_state',
-			help: 'Circuit breaker state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)',
-			labelNames: ['network'],
-		});
-
-		this.queueSize = new client.Gauge({
-			name: 'rpc_queue_size',
-			help: 'Number of requests in queue',
-			labelNames: ['network'],
-		});
-
-		this.queuePending = new client.Gauge({
-			name: 'rpc_queue_pending',
-			help: 'Number of pending requests in queue',
-			labelNames: ['network'],
 		});
 
 		this.initialized = true;

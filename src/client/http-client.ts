@@ -41,19 +41,32 @@ export class HTTPClient {
         // Smart fallback logic for subgraph syncing
         const shouldTryFallback = this.shouldTryFallback(requestBody, response.data);
         
+        // 🔍 DEBUG: Log fallback decision
+        this.logger.info('🔍 FALLBACK DEBUG', {
+          method: requestBody.method,
+          requestId: requestBody.id,
+          networkKey,
+          shouldTryFallback,
+          hasFallback: !!networkConfig.fallback,
+          primaryErrorCode: response.data?.error?.code,
+          primaryErrorMessage: response.data?.error?.message,
+          primaryHasResult: response.data?.result !== null,
+          primaryResult: response.data?.result
+        });
+        
         if (shouldTryFallback && networkConfig.fallback) {
-          this.logger.debug('Primary returned historical data error, trying fallback', {
+          this.logger.info('Primary returned historical data error, trying fallback', {
             method: requestBody.method,
             requestId: requestBody.id,
             networkKey,
-            error: response.data?.error
+            error: response.data?.error,
+            primaryUrl: networkConfig.primary.url,
+            fallbackUrl: networkConfig.fallback.url
           });
           
           try {
             response = await this.tryUpstream(requestBody, networkConfig.fallback.url, networkKey);
-            if (response.data && response.data.result !== null) {
-              upstreamUsed = 'fallback';
-            }
+            upstreamUsed = 'fallback'; // Always mark as fallback if we tried it
           } catch (fallbackError) {
             this.logger.debug('Fallback upstream failed', {
               method: requestBody.method,
@@ -62,6 +75,7 @@ export class HTTPClient {
               fallbackUrl: networkConfig.fallback.url,
               error: (fallbackError as Error).message
             });
+            // If fallback fails completely, keep the original primary response
           }
         }
       } catch (primaryError) {
@@ -99,7 +113,9 @@ export class HTTPClient {
         requestId: requestBody.id,
         networkKey,
         upstreamUsed,
-        hasResult: response.data && response.data.result !== null
+        hasResult: response.data && response.data.result !== null,
+        hasError: response.data && response.data.error !== undefined,
+        errorCode: response.data?.error?.code
       });
       
       return response;
@@ -258,34 +274,58 @@ export class HTTPClient {
       'eth_getBalance'
     ];
     
-    if (!subgraphCriticalMethods.includes(requestBody.method)) return false;
+    if (!subgraphCriticalMethods.includes(requestBody.method)) {
+      this.logger.info('❌ METHOD NOT CRITICAL', { method: requestBody.method });
+      return false;
+    }
     
     const params = Array.isArray(requestBody.params) ? requestBody.params : [];
     
     // Check if it's a historical request (not "latest" or "pending")
     const isHistorical = this.isHistoricalRequest(params);
     
+    this.logger.info('🔍 HISTORICAL CHECK', {
+      method: requestBody.method,
+      params: params,
+      isHistorical,
+      errorCode: responseData?.error?.code,
+      errorMessage: responseData?.error?.message,
+      hasResult: responseData?.result !== undefined,
+      result: responseData?.result
+    });
+    
     if (isHistorical) {
       // Try fallback for JSON-RPC errors on historical calls
       if (responseData?.error?.code === -32000) {
+        this.logger.info('✅ FALLBACK TRIGGERED: -32000 missing trie node error');
         return true; // "missing trie node" error
       }
       
       // Try fallback for other common historical data errors
       if (responseData?.error?.code === -32801) {
+        this.logger.info('✅ FALLBACK TRIGGERED: -32801 no historical RPC available error');
         return true; // "no historical RPC available" error
       }
       
       // Try fallback for empty results on historical requests
       if (responseData?.result === null || responseData?.result === undefined) {
+        this.logger.info('✅ FALLBACK TRIGGERED: null/undefined result on historical request');
         return true; // Missing data
       }
       
       // For eth_getLogs, try fallback if empty array (might indicate missing events)
       if (requestBody.method === 'eth_getLogs' && Array.isArray(responseData?.result) && responseData.result.length === 0) {
+        this.logger.info('✅ FALLBACK TRIGGERED: empty eth_getLogs result');
         return true; // Empty logs might indicate missing events
       }
     }
+    
+    this.logger.info('❌ NO FALLBACK TRIGGERED', {
+      method: requestBody.method,
+      isHistorical,
+      errorCode: responseData?.error?.code,
+      hasResult: responseData?.result !== undefined
+    });
     
     return false;
   }
@@ -294,10 +334,13 @@ export class HTTPClient {
     // Check for historical block parameters
     const historicalBlockParams = ['fromBlock', 'toBlock', 'blockNumber', 'blockHash'];
     
+    this.logger.info('🔍 CHECKING IF HISTORICAL', { params });
+    
     for (const param of params) {
       if (typeof param === 'string') {
         // Check if it's a specific block number/hash (not "latest" or "pending")
         if (param !== 'latest' && param !== 'pending' && param.startsWith('0x')) {
+          this.logger.info('✅ FOUND HISTORICAL BLOCK PARAM', { param });
           return true;
         }
       }
@@ -306,12 +349,14 @@ export class HTTPClient {
         // Check object parameters for historical blocks
         for (const key of historicalBlockParams) {
           if (param[key] && param[key] !== 'latest' && param[key] !== 'pending') {
+            this.logger.info('✅ FOUND HISTORICAL OBJECT PARAM', { key, value: param[key] });
             return true;
           }
         }
       }
     }
     
+    this.logger.info('❌ NOT HISTORICAL REQUEST', { params });
     return false;
   }
 
