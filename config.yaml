@@ -9,11 +9,10 @@ rpc:
   # Single RPC URL (for simple setups)
   url: "https://mainnet.base.org"
   
-  # Multi-network configuration with primary/fallback upstreams
   networks:
     base-mainnet:
       primary:
-        url: "https://base-mainnet.sfrpc.x.superfluid.dev"  # Intentionally broken
+        url: "https://base-mainnet.sfrpc.x.superfluid.dev" 
       fallback:
         url: "https://mainnet.base.org"
     polygon-mainnet:

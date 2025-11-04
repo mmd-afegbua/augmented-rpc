@@ -1,20 +1,20 @@
 import client from 'prom-client';
 
-export class SubgraphMetrics {
-  private static instance: SubgraphMetrics | undefined;
+export class AdvancedMetrics {
+  private static instance: AdvancedMetrics | undefined;
   private initialized = false;
 
-  // Subgraph-specific metrics
+  // Advanced metrics
   blockRangeRequests!: client.Counter<string>;
   logQueryDuration!: client.Histogram<string>;
   cacheHitRateByMethod!: client.Gauge<string>;
-  subgraphSyncProgress!: client.Gauge<string>;
+  syncProgress!: client.Gauge<string>;
   duplicateRequestReduction!: client.Counter<string>;
   prefetchEffectiveness!: client.Gauge<string>;
 
-  static getInstance(): SubgraphMetrics {
+  static getInstance(): AdvancedMetrics {
     if (!this.instance) {
-      this.instance = new SubgraphMetrics();
+      this.instance = new AdvancedMetrics();
     }
     return this.instance;
   }
@@ -23,38 +23,38 @@ export class SubgraphMetrics {
     if (this.initialized) return;
 
     this.blockRangeRequests = new client.Counter({
-      name: 'subgraph_block_range_requests_total',
+      name: 'rpc_block_range_requests_total',
       help: 'Total block range requests processed',
       labelNames: ['network', 'range_size', 'optimization_type'],
     });
 
     this.logQueryDuration = new client.Histogram({
-      name: 'subgraph_log_query_duration_ms',
+      name: 'rpc_log_query_duration_ms',
       help: 'Duration of log queries in milliseconds',
       labelNames: ['network', 'block_range_size'],
       buckets: [10, 50, 100, 500, 1000, 5000, 10000, 30000],
     });
 
     this.cacheHitRateByMethod = new client.Gauge({
-      name: 'subgraph_cache_hit_rate_by_method',
+      name: 'rpc_cache_hit_rate_by_method',
       help: 'Cache hit rate by RPC method',
       labelNames: ['method', 'network'],
     });
 
-    this.subgraphSyncProgress = new client.Gauge({
-      name: 'subgraph_sync_progress_percentage',
-      help: 'Subgraph synchronization progress percentage',
-      labelNames: ['network', 'subgraph_id'],
+    this.syncProgress = new client.Gauge({
+      name: 'rpc_sync_progress_percentage',
+      help: 'Synchronization progress percentage',
+      labelNames: ['network', 'sync_id'],
     });
 
     this.duplicateRequestReduction = new client.Counter({
-      name: 'subgraph_duplicate_requests_reduced_total',
+      name: 'rpc_duplicate_requests_reduced_total',
       help: 'Total duplicate requests reduced through optimization',
       labelNames: ['network', 'method'],
     });
 
     this.prefetchEffectiveness = new client.Gauge({
-      name: 'subgraph_prefetch_effectiveness',
+      name: 'rpc_prefetch_effectiveness',
       help: 'Effectiveness of prefetching (hit rate)',
       labelNames: ['network', 'method'],
     });
@@ -74,8 +74,8 @@ export class SubgraphMetrics {
     this.cacheHitRateByMethod.labels(method, network).set(hitRate);
   }
 
-  updateSyncProgress(network: string, subgraphId: string, progress: number): void {
-    this.subgraphSyncProgress.labels(network, subgraphId).set(progress);
+  updateSyncProgress(network: string, syncId: string, progress: number): void {
+    this.syncProgress.labels(network, syncId).set(progress);
   }
 
   recordDuplicateReduction(network: string, method: string, count: number): void {
@@ -90,3 +90,4 @@ export class SubgraphMetrics {
     return client.register;
   }
 }
+

@@ -2,25 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import { Logger } from '@/utils/logger';
 
 /**
- * Request Logging Middleware - single summary line per request
+ * Request Logging Middleware - generates request ID for tracking
  */
-export function createRequestLogger(logger: Logger) {
+export function createRequestLogger(_logger: Logger) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const startTime = Date.now();
     const requestId = generateRequestId();
     (req as any).requestId = requestId;
 
     res.on('finish', () => {
-      const duration = Date.now() - startTime;
-      const meta = {
-        requestId,
-        method: req.method,
-        url: req.url,
-        statusCode: res.statusCode,
-        duration,
-        rpcMethod: req.body?.method,
-      } as const;
-      logger.debug('Request completed', meta);
+      // Request completion details are logged by the proxy service
+      // No need for redundant logging here
     });
 
     next();

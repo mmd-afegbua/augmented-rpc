@@ -138,7 +138,12 @@ export class CacheManager {
     // Try memory cache first
     if (this.cache.has(key)) {
       const cachedEntry = this.cache.get(key)!;
-      if (Date.now() - cachedEntry.ts <= maxAgeMs) {
+      const age = Date.now() - cachedEntry.ts;
+      const isInfinite = maxAgeMs === Number.POSITIVE_INFINITY;
+      const expiresAt = isInfinite ? null : cachedEntry.ts + maxAgeMs;
+      const timeRemaining = isInfinite ? null : expiresAt! - Date.now();
+      
+      if (isInfinite || age <= maxAgeMs) {
         // Handle compressed data
         val = cachedEntry.val;
         
@@ -151,10 +156,20 @@ export class CacheManager {
           requestId, 
           compressed: cachedEntry.compressed,
           originalSize: cachedEntry.originalSize,
-          compressedSize: cachedEntry.compressedSize
+          compressedSize: cachedEntry.compressedSize,
+          ageMs: age,
+          maxAgeMs: isInfinite ? 'infinity' : maxAgeMs,
+          expiresAt,
+          timeRemainingMs: timeRemaining,
+          neverExpires: isInfinite
         });
       } else {
-        this.logger.debug('Memory cache entry expired', { key, maxAgeMs });
+        this.logger.debug('Memory cache entry expired', { 
+          key, 
+          maxAgeMs, 
+          ageMs: age,
+          expiredByMs: age - maxAgeMs
+        });
         this.cache.delete(key); // Remove expired entry
       }
     } 
@@ -162,24 +177,44 @@ export class CacheManager {
     else if (this.dbCache) {
       try {
         const row = await this.dbCache.get(key);
-        if (row && Date.now() - row.ts <= maxAgeMs) {
-          this.logger.debug('Database cache hit', { key, requestId });
+        if (row) {
+          const age = Date.now() - row.ts;
+          const isInfinite = maxAgeMs === Number.POSITIVE_INFINITY;
+          const expiresAt = isInfinite ? null : row.ts + maxAgeMs;
+          const timeRemaining = isInfinite ? null : expiresAt! - Date.now();
           
-          // Parse the cached data
-          val = JSON.parse(row.val);
-          
-          // Promote to memory cache for faster future access
-          const cacheEntry: CacheEntry = {
-            val: val,
-            ts: row.ts,
-            readCnt: 1,
-            writeCnt: 0
-          };
-          this.cache.set(key, cacheEntry);
-        } else if (row) {
-          this.logger.debug('Database cache entry expired', { key, maxAgeMs });
-          // Remove expired entry from database
-          await this.dbCache.delete(key);
+          if (isInfinite || age <= maxAgeMs) {
+            this.logger.debug('Database cache hit', { 
+              key, 
+              requestId,
+              ageMs: age,
+              maxAgeMs: isInfinite ? 'infinity' : maxAgeMs,
+              expiresAt,
+              timeRemainingMs: timeRemaining,
+              neverExpires: isInfinite
+            });
+            
+            // Parse the cached data
+            val = JSON.parse(row.val);
+            
+            // Promote to memory cache for faster future access
+            const cacheEntry: CacheEntry = {
+              val: val,
+              ts: row.ts,
+              readCnt: 1,
+              writeCnt: 0
+            };
+            this.cache.set(key, cacheEntry);
+          } else {
+            this.logger.debug('Database cache entry expired', { 
+              key, 
+              maxAgeMs,
+              ageMs: age,
+              expiredByMs: age - maxAgeMs
+            });
+            // Remove expired entry from database
+            await this.dbCache.delete(key);
+          }
         }
       } catch (error) {
         this.logger.error('Database cache read error', { error: (error as any)?.message, key });
@@ -209,14 +244,6 @@ export class CacheManager {
       originalSize: JSON.stringify(val).length,
       compressedSize: JSON.stringify(val).length
     };
-
-    this.logger.debug('Writing to cache', { 
-      key, 
-      timestamp, 
-      compressed: newEntry.compressed,
-      originalSize: newEntry.originalSize,
-      compressedSize: newEntry.compressedSize
-    });
 
     // Write to database cache if available
     if (this.dbCache) {

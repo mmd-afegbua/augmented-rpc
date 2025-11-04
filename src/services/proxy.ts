@@ -13,8 +13,8 @@ import { validateContentType, validateJSONRPCRequest, validateParameters, valida
 import { PrometheusMetrics } from '@/telemetry/metrics';
 import { ConnectionPoolManager } from '@/utils/connection-pool';
 import { RequestQueueManager } from '@/utils/request-queue';
-import { SimpleSubgraphCacheStrategy } from '@/utils/subgraph-cache-strategy';
-import { SubgraphMetrics } from '@/telemetry/subgraph-metrics';
+import { SimpleRequestOptimizer } from '@/utils/request-optimizer';
+import { AdvancedMetrics } from '@/telemetry/advanced-metrics';
 
 export class RPCProxy {
 	private readonly app = express();
@@ -32,9 +32,9 @@ export class RPCProxy {
 	private readonly connectionPool: ConnectionPoolManager;
 	private readonly requestQueues: RequestQueueManager;
 	
-	// Subgraph-specific optimizations
-	private readonly subgraphCacheStrategy: SimpleSubgraphCacheStrategy;
-	private readonly subgraphMetrics: SubgraphMetrics;
+	// Request optimization components
+	private readonly requestOptimizer: SimpleRequestOptimizer;
+	private readonly advancedMetrics: AdvancedMetrics;
 	
 	private stats: ProxyStats = {
 		httpRequestsProcessed: 0,
@@ -58,9 +58,9 @@ export class RPCProxy {
 			timeout: 30000
 		});
 
-		// Initialize subgraph-specific optimizations
-		this.subgraphCacheStrategy = new SimpleSubgraphCacheStrategy();
-		this.subgraphMetrics = SubgraphMetrics.getInstance();
+		// Initialize request optimization components
+		this.requestOptimizer = new SimpleRequestOptimizer();
+		this.advancedMetrics = AdvancedMetrics.getInstance();
 
 		this.httpClient = new HTTPClient(this.config, this.logger, this.connectionPool);
 
@@ -95,7 +95,7 @@ export class RPCProxy {
 
 	async start(): Promise<void> {
 		this.metrics.init();
-		this.subgraphMetrics.init();
+		this.advancedMetrics.init();
 		this.setupMiddleware();
 		this.setupRoutes();
 
@@ -287,11 +287,8 @@ export class RPCProxy {
 		startTs: number, 
 		networkKey?: string
 	): Promise<JSONRPCResponse[]> {
-		// Apply subgraph-specific optimizations
-		const optimizedRequests = this.subgraphCacheStrategy.optimizeForSubgraph(requests);
-		
-		// Analyze request patterns for prefetching (simplified)
-		// Subgraph prefetcher removed - no analysis needed
+		// Apply request optimizations
+		const optimizedRequests = this.requestOptimizer.optimizeRequests(requests);
 		
 		const concurrencyLimit = parseInt(process.env.BATCH_CONCURRENCY_LIMIT || '10');
 		const responses: JSONRPCResponse[] = [];
@@ -326,7 +323,7 @@ export class RPCProxy {
 		
 		// Record optimization metrics
 		if (optimizedRequests.length !== requests.length) {
-			this.subgraphMetrics.recordDuplicateReduction(
+			this.advancedMetrics.recordDuplicateReduction(
 				networkKey || 'default', 
 				'batch', 
 				requests.length - optimizedRequests.length
@@ -340,7 +337,7 @@ export class RPCProxy {
 		const keyPrefix = networkKey ? `${networkKey}:` : '';
 		const cacheKey = keyPrefix + this.cacheManager.getCacheKey(request);
 
-		const { isCacheable, maxAgeMs } = this.resolveCachePolicyForSubgraph(request);
+		const { isCacheable, maxAgeMs } = this.resolveCachePolicy(request);
 		
 		// Optimize inflight key generation for common methods
 		const inflightKey = this.generateInflightKey(keyPrefix, request);
@@ -439,7 +436,7 @@ export class RPCProxy {
 		return wrapped;
 	}
 
-	private resolveCachePolicyForSubgraph(request: JSONRPCRequest): { isCacheable: boolean; maxAgeMs: number } {
+	private resolveCachePolicy(request: JSONRPCRequest): { isCacheable: boolean; maxAgeMs: number } {
 		if (CACHEABLE_METHODS.INFINITELY_CACHEABLE.includes(request.method as any)) {
 			return { isCacheable: true, maxAgeMs: Number.POSITIVE_INFINITY };
 		}

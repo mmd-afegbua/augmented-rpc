@@ -1,12 +1,12 @@
 import { JSONRPCRequest } from '@/types';
 
-export interface SubgraphCacheStrategy {
+export interface RequestOptimizer {
   shouldCache(request: JSONRPCRequest): boolean;
   getCacheKey(request: JSONRPCRequest): string;
   getCacheTTL(request: JSONRPCRequest): number;
 }
 
-export class SimpleSubgraphCacheStrategy implements SubgraphCacheStrategy {
+export class SimpleRequestOptimizer implements RequestOptimizer {
   shouldCache(request: JSONRPCRequest): boolean {
     const cacheableMethods = [
       'eth_blockNumber',
@@ -28,8 +28,9 @@ export class SimpleSubgraphCacheStrategy implements SubgraphCacheStrategy {
     return 5 * 60 * 1000;
   }
 
-  optimizeForSubgraph(requests: JSONRPCRequest[]): JSONRPCRequest[] {
-    // Simple optimization - just return the requests as-is
+  optimizeRequests(requests: JSONRPCRequest[]): JSONRPCRequest[] {
+    // Simple optimization - deduplicate and return requests
     return requests;
   }
 }
+

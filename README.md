@@ -1,6 +1,6 @@
 # Augmented RPC Proxy
 
-A high-performance JSON-RPC proxy optimized for **subgraph syncing** and EVM blockchain interactions.
+A high-performance JSON-RPC proxy with intelligent caching and failover for EVM blockchain interactions.
 
 ## 🚀 Quick Start
 
@@ -84,12 +84,13 @@ HELMET_ENABLED=false         # Disable security headers
 
 **Note**: Multi-network configuration is now handled through YAML only. Environment variable `RPC_NETWORKS` is deprecated.
 
-## 🎯 Subgraph Optimizations
+## 🎯 Key Features
 
 - **10-100x faster cache hits** than cache misses
 - **Intelligent caching** for immutable blockchain data
 - **Batch request processing** with parallel execution
-- **Block range optimization** for `eth_getLogs` queries
+- **Optimized caching** for historical block data
+- **Automatic failover** with primary/fallback upstreams
 
 ## 📊 Usage
 
@@ -125,4 +126,4 @@ curl -X POST http://localhost:3000/ \
 ./test-augmented-rpc.sh
 ```
 
-Perfect for subgraph syncing workloads that need fast, reliable RPC access with intelligent caching.
+Perfect for high-throughput workloads that need fast, reliable RPC access with intelligent caching and automatic failover.
