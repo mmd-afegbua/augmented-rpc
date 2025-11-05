@@ -52,6 +52,39 @@ export interface CacheConfig {
   dbFile?: string;
   maxSize: number;
   enableDb: boolean;
+  type: string;
+  compression: CompressionConfig;
+  redis: RedisConfig;
+  clickhouse: ClickHouseConfig;
+  ttl: TTLConfig;
+}
+
+export interface CompressionConfig {
+  enabled: boolean;
+  threshold: number;
+  minRatio: number;
+}
+
+export interface RedisConfig {
+  url: string;
+  maxMemory: string;
+  maxMemoryPolicy: string;
+}
+
+export interface ClickHouseConfig {
+  url: string;
+  database: string;
+  user: string;
+  password: string;
+}
+
+export interface TTLConfig {
+  default: number;
+  immutable: number;
+  blockData: number;
+  logData: number;
+  callData: number;
+  receiptData: number;
 }
 
 export interface RateLimitConfig {

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse-server
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse
+      - ./clickhouse-config:/etc/clickhouse-server
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    restart: unless-stopped
+    command: >
+      sh -c "
+        mkdir -p /var/lib/clickhouse/tmp /var/lib/clickhouse/user_files /var/lib/clickhouse/format_schemas &&
+        chown -R clickhouse:clickhouse /var/lib/clickhouse &&
+        /entrypoint.sh
+      "
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-server
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  rpc-proxy:
+    image: ghcr.io/mmd-afegbua/augmented-rpc:latest
+    container_name: augmented-rpc-proxy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - NODE_ENV=production
+      - CONFIG_FILE=/app/config.yaml
+      - PORT=3000
+      - LOG_LEVEL=info
+      - CACHE_TYPE=hybrid
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_DATABASE=rpc_cache
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+      - RPC_URL=${RPC_URL:-https://mainnet.base.org}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    name: augmented-rpc-network

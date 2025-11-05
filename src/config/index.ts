@@ -72,6 +72,40 @@ export class ConfigManager {
         enabled: process.env.HELMET_ENABLED !== 'false' && yamlConfig.helmet?.enabled !== false,
         contentSecurityPolicy: process.env.HELMET_CSP === 'true' || yamlConfig.helmet?.content_security_policy === true,
       },
+      performance: {
+        connectionPool: {
+          enabled: process.env.ENABLE_CONNECTION_POOL === 'true',
+          size: parseInt(process.env.CONNECTION_POOL_SIZE || '50', 10),
+          timeout: parseInt(process.env.CONNECTION_POOL_TIMEOUT || '30000', 10),
+          keepalive: process.env.CONNECTION_POOL_KEEPALIVE === 'true',
+        },
+        circuitBreaker: {
+          enabled: process.env.ENABLE_CIRCUIT_BREAKER === 'true',
+          threshold: parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD || '5', 10),
+          timeout: parseInt(process.env.CIRCUIT_BREAKER_TIMEOUT || '60000', 10),
+        },
+        requestQueue: {
+          enabled: process.env.ENABLE_REQUEST_QUEUE === 'true',
+          size: parseInt(process.env.REQUEST_QUEUE_SIZE || '1000', 10),
+          concurrency: parseInt(process.env.REQUEST_QUEUE_CONCURRENCY || '10', 10),
+        },
+        cacheWarming: {
+          enabled: process.env.ENABLE_CACHE_WARMING === 'true',
+          interval: parseInt(process.env.CACHE_WARMING_INTERVAL || '300000', 10),
+        },
+        subgraph: {
+          enabled: process.env.ENABLE_SUBGRAPH_OPTIMIZATION === 'true',
+          prefetch: {
+            enabled: process.env.SUBGRAPH_PREFETCH_ENABLED === 'true',
+            interval: parseInt(process.env.SUBGRAPH_PREFETCH_INTERVAL || '60000', 10),
+          },
+        },
+      },
+      metrics: {
+        enabled: process.env.ENABLE_METRICS === 'true',
+        port: parseInt(process.env.METRICS_PORT || '3000', 10),
+        path: process.env.METRICS_PATH || '/metrics',
+      },
     };
   }
 
